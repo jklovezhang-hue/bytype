@@ -29,6 +29,7 @@ pub enum OverlayState {
 /// 引擎状态观察者(默认空实现,CLI 用)。
 pub trait EngineObserver: Send + Sync {
     /// 引擎就绪后回调一次,交回可注入取消的句柄。
+    /// GUI 实现应**保存**此句柄(供"取消录音"命令调用),不要直接丢弃。
     fn on_ready(&self, _control: ControlHandle) {}
     /// 录音/处理状态变化。
     fn on_state(&self, _state: OverlayState) {}
@@ -105,12 +106,20 @@ pub fn run_with(config: Config, observer: Arc<dyn EngineObserver>) -> anyhow::Re
                 }
             },
             HotkeyAction::CancelRecording | HotkeyAction::DiscardRecording => {
+                // 仅当确有进行中的录音才通知取消;否则(如迟到的取消、空取消)
+                // 静默忽略,避免在 Done 之后再发一个多余的 Cancelled。
+                let was_recording = recorder.is_some();
                 recorder = None;
-                observer.on_state(OverlayState::Cancelled);
+                if was_recording {
+                    observer.on_state(OverlayState::Cancelled);
+                }
             }
             action @ (HotkeyAction::StopAndTranscribe
             | HotkeyAction::StopAndTranslate
             | HotkeyAction::StopAndCommand) => {
+                // 取消(Esc/鼠标)经同一 channel 注入。若取消消息在本次 Stop* 取走
+                // recorder 之后才到达,本轮会照常完成并发 Done;那条迟到的
+                // CancelRecording 因 recorder 已为 None 被上面的 was_recording 守卫忽略。
                 let Some(r) = recorder.take() else { continue };
                 observer.on_state(OverlayState::Processing);
                 let (samples, rate) = r.stop();
