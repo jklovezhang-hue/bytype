@@ -12,10 +12,13 @@ enabled  = true           # false 则直接输出原始识别文本,不调用 LL
 base_url = "https://www.packyapi.com/v1"
 api_key  = "sk-在这里填你的key"
 model    = "deepseek-v4-flash"
-temperature = 0.2
+# 整理力度:clean(只去口语词+纠错+标点) / polish(再解决自我更正、理顺成通顺最终话) / summary(提炼要点,可精简改写)
+mode = "polish"
+temperature = 0.0         # 0 = 同输入尽量同输出,稳定性最好
 timeout_secs = 10         # 超时即回退原始识别文本
 skip_if_shorter_than = 4  # 文本短于该字符数时跳过 LLM
-# system_prompt = "自定义纠错提示词;留空则用内置默认"
+# 自定义提示词;非空则覆盖上面的 mode 预设。留空则用 mode 预设。
+# system_prompt = ""
 
 [inject]
 mode = "paste"            # 目前仅支持 paste

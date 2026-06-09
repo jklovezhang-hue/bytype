@@ -57,7 +57,7 @@ pub fn build_request_body(cfg: &LlmConfig, raw: &str) -> Value {
         "model": cfg.model,
         "temperature": cfg.temperature,
         "messages": [
-            { "role": "system", "content": cfg.system_prompt },
+            { "role": "system", "content": cfg.effective_system_prompt() },
             { "role": "user", "content": raw },
         ],
     })
