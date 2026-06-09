@@ -14,6 +14,7 @@ enum SoundSource {
     File(PathBuf),
 }
 
+#[derive(Debug)]
 pub struct SoundPlayer {
     start: SoundSource,
     end: SoundSource,
@@ -53,6 +54,12 @@ fn play(src: &SoundSource) {
     use windows::Win32::Media::Audio::{
         PlaySoundW, SND_ASYNC, SND_FILENAME, SND_MEMORY, SND_NODEFAULT,
     };
+    // SAFETY: PlaySoundW 的 FFI 调用:
+    // - SND_MEMORY 分支:pszsound 被复用为指向 WAVE 字节镜像的指针(Win32 既定用法),
+    //   字节为 'static(include_bytes!),SND_ASYNC 异步播放期间始终有效;PlaySound 按字节读取
+    //   该镜像、不要求 u16 对齐,且 Rust 侧从不把它当 u16 解引用。
+    // - SND_FILENAME 分支:系统在调用内打开并复制文件,文件名缓冲无需在调用返回后存活,
+    //   因此局部 `wide` 可安全在函数结束时释放。
     let ok = unsafe {
         match src {
             SoundSource::Embedded(bytes) => PlaySoundW(
