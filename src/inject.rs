@@ -1,3 +1,57 @@
+use std::{thread, time::Duration};
+use arboard::Clipboard;
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    SendInput, INPUT, INPUT_KEYBOARD, INPUT_0, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
+    VIRTUAL_KEY, VK_CONTROL, VK_V,
+};
+
+/// 备份剪贴板 → 写入文本 → 发 Ctrl+V → 还原剪贴板。
+pub fn inject_text(text: &str) -> anyhow::Result<()> {
+    let text = prepare_text(text);
+    if text.is_empty() {
+        return Ok(());
+    }
+    let mut clipboard = Clipboard::new()?;
+    let previous = clipboard.get_text().ok();
+
+    clipboard.set_text(text)?;
+    thread::sleep(Duration::from_millis(30));
+    send_ctrl_v();
+    thread::sleep(Duration::from_millis(80));
+
+    if let Some(prev) = previous {
+        let _ = clipboard.set_text(prev);
+    }
+    Ok(())
+}
+
+fn key_input(vk: u16, flags: KEYBD_EVENT_FLAGS) -> INPUT {
+    INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: VIRTUAL_KEY(vk),
+                wScan: 0,
+                dwFlags: flags,
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    }
+}
+
+fn send_ctrl_v() {
+    let inputs = [
+        key_input(VK_CONTROL.0, KEYBD_EVENT_FLAGS(0)),
+        key_input(VK_V.0, KEYBD_EVENT_FLAGS(0)),
+        key_input(VK_V.0, KEYEVENTF_KEYUP),
+        key_input(VK_CONTROL.0, KEYEVENTF_KEYUP),
+    ];
+    unsafe {
+        SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
+    }
+}
+
 /// 注入前清理识别/纠错产生的多余包裹与空白。
 pub fn prepare_text(raw: &str) -> String {
     let mut s = raw.trim();
