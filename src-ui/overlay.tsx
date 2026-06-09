@@ -26,12 +26,13 @@ function Pill() {
     }
   };
 
-  // 先停留 holdMs 展示图标,再淡出,最后隐藏窗口
+  // 先停留 holdMs 展示图标,再淡出,最后隐藏窗口。
+  // 内层 200ms 淡出计时也存回 hideT,以便淡出途中若新录音到来能被 clearHide 取消。
   const finishWithFade = (holdMs: number) => {
     clearHide();
     hideT.current = window.setTimeout(() => {
       setLeaving(true);
-      window.setTimeout(() => {
+      hideT.current = window.setTimeout(() => {
         getCurrentWindow().hide();
         setPhase("idle");
         setLeaving(false);

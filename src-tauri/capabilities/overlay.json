@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "overlay",
+  "description": "ByType 浮窗专属能力(隐藏自身)",
+  "windows": ["overlay"],
+  "permissions": [
+    "core:window:allow-hide"
+  ]
+}
