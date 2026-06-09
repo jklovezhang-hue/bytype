@@ -16,6 +16,7 @@ pub struct Config {
     #[serde(default)]
     pub app_style: Vec<AppStyle>,
     pub overlay: OverlayConfig,
+    pub sound: SoundConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -66,6 +67,7 @@ impl Default for Config {
             inject: InjectConfig::default(),
             app_style: Vec::new(),
             overlay: OverlayConfig::default(),
+            sound: SoundConfig::default(),
         }
     }
 }
@@ -114,6 +116,27 @@ pub struct OverlayConfig {
 impl Default for OverlayConfig {
     fn default() -> Self {
         OverlayConfig { enabled: true }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct SoundConfig {
+    /// 是否播放录音开始/结束提示音。
+    pub enabled: bool,
+    /// 自定义开始音 wav 路径;留空用内置默认。
+    pub start_sound: String,
+    /// 自定义结束音 wav 路径;留空用内置默认。
+    pub end_sound: String,
+}
+
+impl Default for SoundConfig {
+    fn default() -> Self {
+        SoundConfig {
+            enabled: true,
+            start_sound: String::new(),
+            end_sound: String::new(),
+        }
     }
 }
 
@@ -252,6 +275,8 @@ impl Config {
         let (path, base) = find_config_file()?;
         let mut cfg = Config::load(&path.to_string_lossy())?;
         cfg.asr.model_dir = resolve_model_dir(&base, &cfg.asr.model_dir);
+        cfg.sound.start_sound = resolve_sound_path(&base, &cfg.sound.start_sound);
+        cfg.sound.end_sound = resolve_sound_path(&base, &cfg.sound.end_sound);
         Ok(cfg)
     }
 }
@@ -263,6 +288,15 @@ pub fn resolve_model_dir(base: &Path, model_dir: &str) -> String {
         base.join(md).to_string_lossy().to_string()
     } else {
         model_dir.to_string()
+    }
+}
+
+/// 解析提示音路径:空字符串保持空(用内置默认);非空相对 base 解析为绝对。
+pub fn resolve_sound_path(base: &Path, p: &str) -> String {
+    if p.trim().is_empty() {
+        String::new()
+    } else {
+        resolve_model_dir(base, p)
     }
 }
 
@@ -439,5 +473,33 @@ style = "技术"
     fn overlay_can_be_disabled() {
         let cfg: Config = toml::from_str("[overlay]\nenabled = false\n").unwrap();
         assert!(!cfg.overlay.enabled);
+    }
+
+    #[test]
+    fn sound_defaults_enabled_paths_empty() {
+        let cfg: Config = toml::from_str("").unwrap();
+        assert!(cfg.sound.enabled);
+        assert!(cfg.sound.start_sound.is_empty());
+        assert!(cfg.sound.end_sound.is_empty());
+    }
+
+    #[test]
+    fn sound_can_be_disabled_and_pathed() {
+        let cfg: Config =
+            toml::from_str("[sound]\nenabled = false\nstart_sound = \"a.wav\"\n").unwrap();
+        assert!(!cfg.sound.enabled);
+        assert_eq!(cfg.sound.start_sound, "a.wav");
+    }
+
+    #[test]
+    fn resolve_sound_path_empty_stays_empty_else_absolute() {
+        let base = Path::new("C:\\base");
+        assert_eq!(resolve_sound_path(base, ""), "");
+        assert_eq!(resolve_sound_path(base, "   "), "");
+        let r = resolve_sound_path(base, "snd\\a.wav");
+        assert!(Path::new(&r).is_absolute());
+        assert!(r.contains("base"));
+        // 绝对路径原样返回
+        assert_eq!(resolve_sound_path(base, "C:\\x\\a.wav"), "C:\\x\\a.wav");
     }
 }

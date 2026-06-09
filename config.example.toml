@@ -39,3 +39,10 @@ mode = "paste"            # 目前仅支持 paste
 [overlay]
 # 是否显示录音浮窗(底部正中的波形药丸)。false 则不弹。
 enabled = true
+
+[sound]
+# 录音开始/结束提示音。enabled = false 关闭。
+# start_sound / end_sound 留空用内置默认;填 wav 路径(相对 config 目录或绝对)可覆盖。
+enabled = true
+start_sound = ""
+end_sound = ""
