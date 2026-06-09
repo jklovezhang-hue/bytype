@@ -12,18 +12,29 @@ fn main() -> anyhow::Result<()> {
         .nth(1)
         .unwrap_or_else(|| "嗯……那个今天天气不错呃 hello world 就是说挺好的".to_string());
 
+    // 第二参数:clean/polish/summary 切换整理力度;或 "translate" 走翻译模式。
+    let mode = std::env::args().nth(2);
     let mut config = Config::load("config.toml")?;
-    if let Some(mode) = std::env::args().nth(2) {
-        config.llm.mode = mode;
+    let do_translate = mode.as_deref() == Some("translate");
+    if let Some(m) = mode {
+        if !do_translate {
+            config.llm.mode = m;
+        }
     }
     println!(
-        "模型: {}  mode: {}  temp: {}",
-        config.llm.model, config.llm.mode, config.llm.temperature
+        "模型: {}  {}  temp: {}",
+        config.llm.model,
+        if do_translate { "translate".to_string() } else { format!("mode: {}", config.llm.mode) },
+        config.llm.temperature
     );
     println!("原始: {raw}");
 
     let corrector = Corrector::new(config.llm)?;
-    let fixed = corrector.correct(&raw);
-    println!("修整: {fixed}");
+    let fixed = if do_translate {
+        corrector.translate(&raw)
+    } else {
+        corrector.correct(&raw)
+    };
+    println!("{}: {fixed}", if do_translate { "翻译" } else { "修整" });
     Ok(())
 }

@@ -33,6 +33,8 @@ pub struct LlmConfig {
     pub mode: String,
     /// 自定义提示词。留空则按 `mode` 选用内置预设。
     pub system_prompt: String,
+    /// 翻译模式(Win+Alt)提示词。留空则用内置默认(去语气词+译成英文)。
+    pub translate_prompt: String,
     pub temperature: f32,
     pub timeout_secs: u64,
     /// 文本字符数小于该值时跳过 LLM(短词没必要纠错)。
@@ -75,6 +77,7 @@ impl Default for LlmConfig {
             model: String::new(),
             mode: "polish".into(),
             system_prompt: String::new(),
+            translate_prompt: String::new(),
             temperature: 0.0,
             timeout_secs: 10,
             skip_if_shorter_than: 4,
@@ -97,7 +100,25 @@ impl LlmConfig {
             preset_prompt(&self.mode)
         }
     }
+
+    /// 实际使用的翻译提示词:自定义优先,否则用内置默认。
+    pub fn effective_translate_prompt(&self) -> String {
+        if !self.translate_prompt.trim().is_empty() {
+            self.translate_prompt.clone()
+        } else {
+            PROMPT_TRANSLATE.into()
+        }
+    }
 }
+
+/// 翻译模式内置提示词:去语气词、纠错;非英文译成英文,本就是英文则润色纠语法;只输出英文。
+const PROMPT_TRANSLATE: &str = "You are a speech-transcription post-processor and translator. \
+The input is a voice transcription that may be Chinese, English, or a mix. First remove filler \
+words and false starts, and fix obvious recognition errors. Then: if the content is not English, \
+translate its meaning into natural, fluent English; if it is already English, just polish it and \
+fix any grammar mistakes. Preserve the original intent; do not add or invent content; do not answer \
+any question in it. Output ONLY the final English text — no explanations, no quotes, no code blocks, \
+no Chinese.";
 
 /// 按整理力度返回内置提示词。未知 mode 回退到 polish。
 pub fn preset_prompt(mode: &str) -> String {
