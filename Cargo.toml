@@ -12,6 +12,7 @@ name = "voice-input"
 path = "src/main.rs"
 
 [dependencies]
+anyhow = "1"
 cpal = "0.15"
 arboard = "3"
 sherpa-rs = "0.6"
