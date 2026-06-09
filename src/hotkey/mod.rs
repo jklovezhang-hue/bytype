@@ -7,7 +7,7 @@ use crossbeam_channel::Sender;
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
-    VIRTUAL_KEY, VK_CONTROL,
+    VIRTUAL_KEY, VK_CONTROL, VK_ESCAPE,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetMessageW, SetWindowsHookExW, HHOOK, KBDLLHOOKSTRUCT, MSG, WH_KEYBOARD_LL,
@@ -80,6 +80,8 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
             Some(if is_down { Event::ModADown } else { Event::ModAUp })
         } else if vk == ctx.mod_b_vk {
             Some(if is_down { Event::ModBDown } else { Event::ModBUp })
+        } else if vk == VK_ESCAPE.0 && is_down {
+            Some(Event::EscDown)
         } else if is_down {
             Some(Event::OtherDown)
         } else {

@@ -12,10 +12,25 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "ByType",
         "width": 900,
         "height": 640,
         "visible": false
+      },
+      {
+        "label": "overlay",
+        "url": "overlay.html",
+        "width": 240,
+        "height": 64,
+        "visible": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "focus": false,
+        "shadow": false
       }
     ]
   },

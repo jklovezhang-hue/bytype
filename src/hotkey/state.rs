@@ -13,6 +13,8 @@ pub enum Event {
     ModBUp,
     /// 其他任意键按下
     OtherDown,
+    /// Esc 按下(录音中作取消手势)
+    EscDown,
 }
 
 /// 状态机给出的动作。
@@ -46,6 +48,8 @@ pub struct HotkeyState {
     mod_b_down: bool,
     mod_a_swallow: bool,
     mod_b_swallow: bool,
+    /// 本次按住期间是否有"透传给系统"的其他键(用于决定松手是否需伪装释放)
+    passthrough_seen: bool,
 }
 
 impl HotkeyState {
@@ -57,6 +61,7 @@ impl HotkeyState {
                 } else {
                     self.pressed = true;
                     self.combo = false;
+                    self.passthrough_seen = false;
                     self.mod_a_seen = self.mod_a_down;
                     self.mod_b_seen = self.mod_b_down;
                     Decision { action: Action::StartRecording, suppress: false }
@@ -101,10 +106,27 @@ impl HotkeyState {
                 }
             }
             Event::OtherDown => {
-                if self.pressed && !self.combo {
-                    self.combo = true;
-                    Decision { action: Action::CancelRecording, suppress: false }
+                if self.pressed {
+                    // 录音中按下其他键:该键会透传给系统,记录之
+                    // (即便已因取消进入 combo 态,也要记,避免松手时多余的伪装释放)
+                    self.passthrough_seen = true;
+                    if !self.combo {
+                        self.combo = true;
+                        Decision { action: Action::CancelRecording, suppress: false }
+                    } else {
+                        Decision { action: Action::None, suppress: false }
+                    }
                 } else {
+                    Decision { action: Action::None, suppress: false }
+                }
+            }
+            Event::EscDown => {
+                if self.pressed && !self.combo {
+                    // 录音中:取消并吞掉 Esc(不打扰前台程序)
+                    self.combo = true;
+                    Decision { action: Action::CancelRecording, suppress: true }
+                } else {
+                    // 空闲:原样透传
                     Decision { action: Action::None, suppress: false }
                 }
             }
@@ -113,14 +135,18 @@ impl HotkeyState {
                     return Decision { action: Action::None, suppress: false };
                 }
                 let was_combo = self.combo;
+                let passthrough = self.passthrough_seen;
                 let a = self.mod_a_seen;
                 let b = self.mod_b_seen;
                 self.pressed = false;
                 self.combo = false;
+                self.passthrough_seen = false;
                 self.mod_a_seen = false;
                 self.mod_b_seen = false;
                 if was_combo {
-                    Decision { action: Action::None, suppress: false }
+                    // 全程仅被吞键(如 Esc 取消)时,系统没见到任何中间键 →
+                    // 需伪装释放防开始菜单;有透传键(OtherDown)则系统已见,直接放行。
+                    Decision { action: Action::None, suppress: !passthrough }
                 } else if held_ms >= MIN_HOLD_MS {
                     let action = if b {
                         Action::StopAndCommand
@@ -213,5 +239,86 @@ mod tests {
         let mut s = HotkeyState::default();
         s.handle(Event::PrimaryDown);
         assert_eq!(s.handle(Event::PrimaryDown), Decision { action: Action::None, suppress: false });
+    }
+
+    #[test]
+    fn esc_cancels_and_suppresses_during_recording() {
+        let mut s = HotkeyState::default();
+        s.handle(Event::PrimaryDown);
+        // 录音中按 Esc:取消,且吞掉 Esc(不透传给前台程序)
+        assert_eq!(
+            s.handle(Event::EscDown),
+            Decision { action: Action::CancelRecording, suppress: true }
+        );
+        // 取消后松开主键:全程无透传键 → 走伪装释放(suppress:true)、不转录
+        assert_eq!(
+            s.handle(Event::PrimaryUp { held_ms: 1000 }),
+            Decision { action: Action::None, suppress: true }
+        );
+    }
+
+    #[test]
+    fn esc_passes_through_when_idle() {
+        let mut s = HotkeyState::default();
+        // 没在录音时按 Esc:原样透传,不取消
+        assert_eq!(
+            s.handle(Event::EscDown),
+            Decision { action: Action::None, suppress: false }
+        );
+    }
+
+    #[test]
+    fn esc_after_modifier_still_disguises_release() {
+        // Win+Alt 录音中按 Esc 取消:Alt 与 Esc 均被吞,松手仍需伪装释放防开始菜单
+        let mut s = HotkeyState::default();
+        s.handle(Event::PrimaryDown);
+        s.handle(Event::ModADown);
+        assert_eq!(
+            s.handle(Event::EscDown),
+            Decision { action: Action::CancelRecording, suppress: true }
+        );
+        s.handle(Event::ModAUp);
+        assert_eq!(
+            s.handle(Event::PrimaryUp { held_ms: 1000 }),
+            Decision { action: Action::None, suppress: true }
+        );
+    }
+
+    #[test]
+    fn double_esc_second_passes_through_and_release_disguised() {
+        // 取消后再按 Esc:第二个 Esc 透传(不再吞),且松手仍伪装释放(全程无透传键)
+        let mut s = HotkeyState::default();
+        s.handle(Event::PrimaryDown);
+        assert_eq!(
+            s.handle(Event::EscDown),
+            Decision { action: Action::CancelRecording, suppress: true }
+        );
+        assert_eq!(
+            s.handle(Event::EscDown),
+            Decision { action: Action::None, suppress: false }
+        );
+        assert_eq!(
+            s.handle(Event::PrimaryUp { held_ms: 1000 }),
+            Decision { action: Action::None, suppress: true }
+        );
+    }
+
+    #[test]
+    fn esc_then_other_key_does_not_disguise_release() {
+        // Esc 取消后又按了透传键:系统已见该键,松手无需伪装释放
+        let mut s = HotkeyState::default();
+        s.handle(Event::PrimaryDown);
+        assert_eq!(
+            s.handle(Event::EscDown),
+            Decision { action: Action::CancelRecording, suppress: true }
+        );
+        assert_eq!(
+            s.handle(Event::OtherDown),
+            Decision { action: Action::None, suppress: false }
+        );
+        assert_eq!(
+            s.handle(Event::PrimaryUp { held_ms: 1000 }),
+            Decision { action: Action::None, suppress: false }
+        );
     }
 }

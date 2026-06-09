@@ -1,10 +1,11 @@
 //! 听写引擎主循环:热键 → 录音 → ASR →(LLM 整理/翻译/命令)→ 注入。
 //! 命令行 bin 与 Tauri 应用共用此入口。
 
+use std::sync::Arc;
 use std::{thread, time::Duration};
 
 use arboard::Clipboard;
-use crossbeam_channel::unbounded;
+use crossbeam_channel::{unbounded, Sender};
 
 use crate::asr::Transcriber;
 use crate::audio::Recorder;
@@ -15,8 +16,59 @@ use crate::hotkey::{self, HotkeyAction};
 use crate::inject::inject_text;
 use crate::keys::vk_from_name;
 
-/// 阻塞运行听写引擎(安装键盘钩子并进入事件循环)。
+/// 浮窗要展示的状态。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OverlayState {
+    Recording,
+    Processing,
+    Done,
+    Cancelled,
+    Failed,
+}
+
+/// 引擎状态观察者(默认空实现,CLI 用)。
+pub trait EngineObserver: Send + Sync {
+    /// 引擎就绪后回调一次,交回可注入取消的句柄。
+    /// GUI 实现应**保存**此句柄(供"取消录音"命令调用),不要直接丢弃。
+    fn on_ready(&self, _control: ControlHandle) {}
+    /// 录音/处理状态变化。
+    fn on_state(&self, _state: OverlayState) {}
+}
+
+/// 什么都不做的观察者(命令行版用,行为与旧版一致)。
+pub struct NoopObserver;
+impl EngineObserver for NoopObserver {}
+
+/// 交给 GUI 的取消句柄:内含动作发送端克隆,可从外部注入"取消录音"。
+pub struct ControlHandle {
+    tx: Sender<HotkeyAction>,
+}
+
+impl ControlHandle {
+    /// 请求取消当前录音(等价于按 Esc / 点药丸)。
+    pub fn cancel(&self) {
+        let _ = self.tx.send(HotkeyAction::CancelRecording);
+    }
+}
+
+/// 计算浮窗在某显示器底部正中的左上角坐标(纯函数,便于测试)。
+pub fn bottom_center(
+    area_w: i32,
+    area_h: i32,
+    win_w: i32,
+    win_h: i32,
+    bottom_margin: i32,
+) -> (i32, i32) {
+    ((area_w - win_w) / 2, area_h - win_h - bottom_margin)
+}
+
+/// 阻塞运行听写引擎(命令行用:无浮窗)。
 pub fn run(config: Config) -> anyhow::Result<()> {
+    run_with(config, Arc::new(NoopObserver))
+}
+
+/// 阻塞运行听写引擎,并把状态变化回调给观察者(GUI 用)。
+pub fn run_with(config: Config, observer: Arc<dyn EngineObserver>) -> anyhow::Result<()> {
     let primary = vk_from_name(&config.hotkey.primary)?;
     let mod_a = vk_from_name(&config.hotkey.translate_modifier)?;
     let mod_b = vk_from_name(&config.hotkey.command_modifier)?;
@@ -33,6 +85,7 @@ pub fn run(config: Config) -> anyhow::Result<()> {
     );
 
     let (tx, rx) = unbounded::<HotkeyAction>();
+    observer.on_ready(ControlHandle { tx: tx.clone() });
     thread::spawn(move || {
         if let Err(e) = hotkey::run(tx, primary, mod_a, mod_b) {
             eprintln!("钩子线程退出: {e}");
@@ -43,45 +96,65 @@ pub fn run(config: Config) -> anyhow::Result<()> {
     for action in rx.iter() {
         match action {
             HotkeyAction::StartRecording => match Recorder::start() {
-                Ok(r) => recorder = Some(r),
-                Err(e) => eprintln!("录音启动失败: {e}"),
+                Ok(r) => {
+                    recorder = Some(r);
+                    observer.on_state(OverlayState::Recording);
+                }
+                Err(e) => {
+                    eprintln!("录音启动失败: {e}");
+                    observer.on_state(OverlayState::Failed);
+                }
             },
             HotkeyAction::CancelRecording | HotkeyAction::DiscardRecording => {
+                // 仅当确有进行中的录音才通知取消;否则(如迟到的取消、空取消)
+                // 静默忽略,避免在 Done 之后再发一个多余的 Cancelled。
+                let was_recording = recorder.is_some();
                 recorder = None;
+                if was_recording {
+                    observer.on_state(OverlayState::Cancelled);
+                }
             }
             action @ (HotkeyAction::StopAndTranscribe
             | HotkeyAction::StopAndTranslate
             | HotkeyAction::StopAndCommand) => {
+                // 取消(Esc/鼠标)经同一 channel 注入。若取消消息在本次 Stop* 取走
+                // recorder 之后才到达,本轮会照常完成并发 Done;那条迟到的
+                // CancelRecording 因 recorder 已为 None 被上面的 was_recording 守卫忽略。
                 let Some(r) = recorder.take() else { continue };
+                observer.on_state(OverlayState::Processing);
                 let (samples, rate) = r.stop();
                 let raw = match transcriber.transcribe(&samples, rate) {
                     Ok(t) => t,
                     Err(e) => {
                         eprintln!("识别失败: {e}");
+                        observer.on_state(OverlayState::Failed);
                         continue;
                     }
                 };
                 println!("识别: {raw}");
                 let style = foreground_process_name().and_then(|p| config.style_for(&p));
-                match action {
+                let outcome: anyhow::Result<()> = match action {
                     HotkeyAction::StopAndCommand => handle_command(&corrector, &raw),
                     HotkeyAction::StopAndTranslate => {
                         let text = corrector.translate(&raw, style.as_deref());
                         if text != raw {
                             println!("翻译: {text}");
                         }
-                        if let Err(e) = inject_text(&text) {
-                            eprintln!("注入失败: {e}");
-                        }
+                        inject_text(&text)
                     }
                     _ => {
                         let text = corrector.correct(&raw, style.as_deref());
                         if text != raw {
                             println!("修整: {text}");
                         }
-                        if let Err(e) = inject_text(&text) {
-                            eprintln!("注入失败: {e}");
-                        }
+                        inject_text(&text)
+                    }
+                };
+                match outcome {
+                    Ok(()) => observer.on_state(OverlayState::Done),
+                    Err(e) => {
+                        eprintln!("注入失败: {e}");
+                        observer.on_state(OverlayState::Failed);
                     }
                 }
             }
@@ -90,7 +163,7 @@ pub fn run(config: Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn handle_command(corrector: &Corrector, instruction: &str) {
+fn handle_command(corrector: &Corrector, instruction: &str) -> anyhow::Result<()> {
     let selected = match copy_selection() {
         Ok(s) => s,
         Err(e) => {
@@ -100,14 +173,13 @@ fn handle_command(corrector: &Corrector, instruction: &str) {
     };
     if selected.trim().is_empty() {
         let text = corrector.correct(instruction, None);
-        let _ = inject_text(&text);
-        return;
+        inject_text(&text)?;
+        return Ok(());
     }
     let result = corrector.command(instruction, &selected);
     println!("命令: {instruction}\n结果: {result}");
-    if let Err(e) = inject_text(&result) {
-        eprintln!("注入失败: {e}");
-    }
+    inject_text(&result)?;
+    Ok(())
 }
 
 fn copy_selection() -> anyhow::Result<String> {
@@ -147,4 +219,24 @@ fn copy_selection() -> anyhow::Result<String> {
         let _ = clipboard.set_text(prev);
     }
     Ok(selected)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bottom_center_centers_horizontally_and_offsets_bottom() {
+        // 1920x1080 屏,240x64 窗,底部留 80
+        let (x, y) = bottom_center(1920, 1080, 240, 64, 80);
+        assert_eq!(x, (1920 - 240) / 2); // 840
+        assert_eq!(y, 1080 - 64 - 80); // 936
+    }
+
+    #[test]
+    fn bottom_center_handles_window_wider_than_area() {
+        // 窗比屏宽时 x 可能为负(调用方可自行 clamp;此处只验证公式)
+        let (x, _y) = bottom_center(100, 100, 240, 64, 10);
+        assert_eq!(x, (100 - 240) / 2);
+    }
 }

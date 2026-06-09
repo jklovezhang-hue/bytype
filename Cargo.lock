@@ -441,6 +441,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-single-instance",
  "voice-input",
+ "windows 0.58.0",
 ]
 
 [[package]]

@@ -6,3 +6,5 @@
 /config.toml
 /node_modules
 /dist
+/.superpowers
+/src-tauri/gen
