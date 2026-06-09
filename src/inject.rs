@@ -34,7 +34,7 @@ fn key_input(vk: u16, flags: KEYBD_EVENT_FLAGS) -> INPUT {
                 wScan: 0,
                 dwFlags: flags,
                 time: 0,
-                dwExtraInfo: 0,
+                dwExtraInfo: crate::INJECTED_TAG,
             },
         },
     }

@@ -5,7 +5,10 @@ use std::time::Instant;
 
 use crossbeam_channel::Sender;
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
-use windows::Win32::UI::Input::KeyboardAndMouse::VK_LWIN;
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
+    VIRTUAL_KEY, VK_CONTROL, VK_LWIN,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetMessageW, SetWindowsHookExW, HHOOK, KBDLLHOOKSTRUCT, MSG, WH_KEYBOARD_LL,
     WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
@@ -45,6 +48,12 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
         return CallNextHookEx(HHOOK::default(), code, wparam, lparam);
     }
     let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
+
+    // 忽略本程序自己注入的事件(伪装 Win 弹起、Ctrl+V 粘贴),否则会反噬状态机。
+    if kb.dwExtraInfo == crate::INJECTED_TAG {
+        return CallNextHookEx(HHOOK::default(), code, wparam, lparam);
+    }
+
     let vk = kb.vkCode as u16;
     let msg = wparam.0 as u32;
 
@@ -61,6 +70,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
     };
 
     if let Some(kind) = kind {
+        let mut suppress = false;
         if let Some(ctx_lock) = CTX.get() {
             let mut ctx = ctx_lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             let ev = match kind {
@@ -80,15 +90,47 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
                     Event::Up { held_ms: held }
                 }
             };
-            let Decision { action, suppress } = ctx.state.handle(ev);
-            dispatch(&ctx.sender, action);
-            if suppress {
-                return LRESULT(1);
-            }
+            let decision: Decision = ctx.state.handle(ev);
+            dispatch(&ctx.sender, decision.action);
+            suppress = decision.suppress;
+            // 锁在此作用域结束时释放,随后再注入,避免持锁注入。
+        }
+        if suppress {
+            // suppress 只在"单独 Win 弹起"时为真:吞掉物理弹起,补发伪装序列。
+            disguise_release_win();
+            return LRESULT(1);
         }
     }
 
     CallNextHookEx(HHOOK::default(), code, wparam, lparam)
+}
+
+/// 吞掉物理 Win 弹起后调用:补发 `Ctrl 轻敲` + `合成 Win 弹起`。
+/// - `Ctrl` 轻敲让系统认为 Win 不是"单独按放",从而不弹开始菜单;
+/// - 合成的 Win 弹起让系统知道 Win 已松开,避免 Win 被"卡住"(后续按键变成 Win+键)。
+/// 所有事件带 `INJECTED_TAG` 标记,会被本钩子忽略。
+unsafe fn disguise_release_win() {
+    let inputs = [
+        tagged_key(VK_CONTROL.0, KEYBD_EVENT_FLAGS(0)),
+        tagged_key(VK_CONTROL.0, KEYEVENTF_KEYUP),
+        tagged_key(VK_LWIN.0, KEYEVENTF_KEYUP),
+    ];
+    SendInput(&inputs, std::mem::size_of::<INPUT>() as i32);
+}
+
+fn tagged_key(vk: u16, flags: KEYBD_EVENT_FLAGS) -> INPUT {
+    INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: VIRTUAL_KEY(vk),
+                wScan: 0,
+                dwFlags: flags,
+                time: 0,
+                dwExtraInfo: crate::INJECTED_TAG,
+            },
+        },
+    }
 }
 
 fn dispatch(sender: &Sender<HotkeyAction>, action: Action) {
