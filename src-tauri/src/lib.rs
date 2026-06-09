@@ -22,7 +22,7 @@ struct ControlSlot(Mutex<Option<ControlHandle>>);
 /// 前端点药丸时调用:请求取消当前录音(跳过 LLM)。
 #[tauri::command]
 fn cancel_recording(slot: State<ControlSlot>) {
-    if let Some(c) = slot.0.lock().unwrap().as_ref() {
+    if let Some(c) = slot.0.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
         c.cancel();
     }
 }
@@ -35,7 +35,12 @@ struct TauriObserver {
 
 impl EngineObserver for TauriObserver {
     fn on_ready(&self, control: ControlHandle) {
-        self.app.state::<ControlSlot>().0.lock().unwrap().replace(control);
+        self.app
+            .state::<ControlSlot>()
+            .0
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .replace(control);
     }
 
     fn on_state(&self, state: OverlayState) {
