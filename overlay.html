@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ByType Overlay</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+      #overlay-root { height: 100vh; display: flex; align-items: center; justify-content: center; }
+      .pill {
+        display: inline-flex; align-items: center; gap: 9px;
+        padding: 7px 14px; border-radius: 999px;
+        background: rgba(16, 16, 22, 0.82);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        cursor: pointer; user-select: none;
+        opacity: 0; transform: translateY(12px);
+        transition: opacity .16s ease, transform .16s ease;
+      }
+      .pill.show { opacity: 1; transform: translateY(0); }
+      .left { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; }
+      .time { color: #dbe1ea; font-size: 13px; font-variant-numeric: tabular-nums; }
+      .check { color: #46d98a; font-size: 15px; font-weight: 700; }
+      .cross { color: #ff6b6b; font-size: 15px; font-weight: 700; }
+      .spin {
+        width: 14px; height: 14px; border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.18); border-top-color: #7dd3fc;
+        animation: spin .7s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .wave { display: inline-flex; align-items: center; gap: 3px; height: 22px; }
+      .wave i {
+        display: block; width: 3px; height: 100%;
+        background: linear-gradient(180deg, #7dd3fc, #38bdf8);
+        border-radius: 2px; transform-origin: center;
+        animation: bar .9s ease-in-out infinite;
+      }
+      .wave.static i { animation: none; opacity: .35; transform: scaleY(.4); }
+      @keyframes bar { 0%, 100% { transform: scaleY(.22); } 50% { transform: scaleY(1); } }
+    </style>
+  </head>
+  <body>
+    <div id="overlay-root"></div>
+    <script type="module" src="/src-ui/overlay.tsx"></script>
+  </body>
+</html>
