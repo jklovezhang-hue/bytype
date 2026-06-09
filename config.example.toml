@@ -1,5 +1,7 @@
 # 复制本文件为 config.toml 并填入你的中转站信息。
 # 改完保存后重启程序生效。
+#
+# 热键:按住【左 Win】说话 = 识别 + 整理;按住【左 Win + 左 Alt】说话 = 翻译成英文。
 
 hotkey = "LWin"          # 触发热键(阶段三可改;目前固定左 Win)
 
@@ -19,6 +21,8 @@ timeout_secs = 10         # 超时即回退原始识别文本
 skip_if_shorter_than = 4  # 文本短于该字符数时跳过 LLM
 # 自定义提示词;非空则覆盖上面的 mode 预设。留空则用 mode 预设。
 # system_prompt = ""
+# 翻译模式(左 Win+左 Alt)提示词;留空则用内置默认(去语气词+译成英文,纯英文则润色纠语法)。
+# translate_prompt = ""
 
 [inject]
 mode = "paste"            # 目前仅支持 paste

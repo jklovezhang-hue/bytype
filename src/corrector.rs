@@ -19,25 +19,35 @@ impl Corrector {
         Ok(Corrector { client, cfg })
     }
 
-    /// 纠错。禁用 / 文本过短 / 网络失败 / 空响应 → 返回原文(绝不丢输入)。
+    /// 普通整理。禁用 / 文本过短 / 网络失败 / 空响应 → 返回原文(绝不丢输入)。
     pub fn correct(&self, raw: &str) -> String {
+        self.process(raw, &self.cfg.effective_system_prompt())
+    }
+
+    /// 翻译(去语气词 + 译成英文)。同样在失败时回退原文。
+    pub fn translate(&self, raw: &str) -> String {
+        self.process(raw, &self.cfg.effective_translate_prompt())
+    }
+
+    /// 用给定系统提示词处理文本;任何不利情况都回退原文。
+    fn process(&self, raw: &str, system_prompt: &str) -> String {
         let trimmed = raw.trim();
         if !self.cfg.enabled || trimmed.chars().count() < self.cfg.skip_if_shorter_than {
             return raw.to_string();
         }
-        match self.try_correct(trimmed) {
+        match self.try_process(trimmed, system_prompt) {
             Ok(t) if !t.trim().is_empty() => t,
             Ok(_) => raw.to_string(),
             Err(e) => {
-                eprintln!("LLM 纠错失败,回退原文: {e}");
+                eprintln!("LLM 处理失败,回退原文: {e}");
                 raw.to_string()
             }
         }
     }
 
-    fn try_correct(&self, raw: &str) -> anyhow::Result<String> {
+    fn try_process(&self, raw: &str, system_prompt: &str) -> anyhow::Result<String> {
         let url = format!("{}/chat/completions", self.cfg.base_url.trim_end_matches('/'));
-        let body = build_request_body(&self.cfg, raw);
+        let body = build_request_body(&self.cfg, system_prompt, raw);
         let resp = self
             .client
             .post(&url)
@@ -52,12 +62,12 @@ impl Corrector {
 }
 
 /// 构造 chat/completions 请求体。
-pub fn build_request_body(cfg: &LlmConfig, raw: &str) -> Value {
+pub fn build_request_body(cfg: &LlmConfig, system_prompt: &str, raw: &str) -> Value {
     json!({
         "model": cfg.model,
         "temperature": cfg.temperature,
         "messages": [
-            { "role": "system", "content": cfg.effective_system_prompt() },
+            { "role": "system", "content": system_prompt },
             { "role": "user", "content": raw },
         ],
     })
@@ -90,10 +100,10 @@ mod tests {
 
     #[test]
     fn request_body_has_model_and_two_messages() {
-        let body = build_request_body(&cfg(), "你好");
+        let body = build_request_body(&cfg(), "SYS", "你好");
         assert_eq!(body["model"], "deepseek-v4-flash");
         assert_eq!(body["messages"][0]["role"], "system");
-        assert_eq!(body["messages"][0]["content"], "SP");
+        assert_eq!(body["messages"][0]["content"], "SYS");
         assert_eq!(body["messages"][1]["role"], "user");
         assert_eq!(body["messages"][1]["content"], "你好");
     }
