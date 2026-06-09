@@ -17,12 +17,7 @@
         "height": 640,
         "visible": false
       }
-    ],
-    "trayIcon": {
-      "id": "main",
-      "iconPath": "icons/icon.png",
-      "tooltip": "ByType"
-    }
+    ]
   },
   "bundle": {
     "active": true,
