@@ -106,10 +106,16 @@ impl HotkeyState {
                 }
             }
             Event::OtherDown => {
-                if self.pressed && !self.combo {
-                    self.combo = true;
+                if self.pressed {
+                    // 录音中按下其他键:该键会透传给系统,记录之
+                    // (即便已因取消进入 combo 态,也要记,避免松手时多余的伪装释放)
                     self.passthrough_seen = true;
-                    Decision { action: Action::CancelRecording, suppress: false }
+                    if !self.combo {
+                        self.combo = true;
+                        Decision { action: Action::CancelRecording, suppress: false }
+                    } else {
+                        Decision { action: Action::None, suppress: false }
+                    }
                 } else {
                     Decision { action: Action::None, suppress: false }
                 }
@@ -275,6 +281,44 @@ mod tests {
         assert_eq!(
             s.handle(Event::PrimaryUp { held_ms: 1000 }),
             Decision { action: Action::None, suppress: true }
+        );
+    }
+
+    #[test]
+    fn double_esc_second_passes_through_and_release_disguised() {
+        // 取消后再按 Esc:第二个 Esc 透传(不再吞),且松手仍伪装释放(全程无透传键)
+        let mut s = HotkeyState::default();
+        s.handle(Event::PrimaryDown);
+        assert_eq!(
+            s.handle(Event::EscDown),
+            Decision { action: Action::CancelRecording, suppress: true }
+        );
+        assert_eq!(
+            s.handle(Event::EscDown),
+            Decision { action: Action::None, suppress: false }
+        );
+        assert_eq!(
+            s.handle(Event::PrimaryUp { held_ms: 1000 }),
+            Decision { action: Action::None, suppress: true }
+        );
+    }
+
+    #[test]
+    fn esc_then_other_key_does_not_disguise_release() {
+        // Esc 取消后又按了透传键:系统已见该键,松手无需伪装释放
+        let mut s = HotkeyState::default();
+        s.handle(Event::PrimaryDown);
+        assert_eq!(
+            s.handle(Event::EscDown),
+            Decision { action: Action::CancelRecording, suppress: true }
+        );
+        assert_eq!(
+            s.handle(Event::OtherDown),
+            Decision { action: Action::None, suppress: false }
+        );
+        assert_eq!(
+            s.handle(Event::PrimaryUp { held_ms: 1000 }),
+            Decision { action: Action::None, suppress: false }
         );
     }
 }
