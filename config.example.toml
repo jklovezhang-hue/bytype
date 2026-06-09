@@ -1,0 +1,21 @@
+# 复制本文件为 config.toml 并填入你的中转站信息。
+# 改完保存后重启程序生效。
+
+hotkey = "LWin"          # 触发热键(阶段三可改;目前固定左 Win)
+
+[asr]
+model_dir = "./models/sensevoice"
+language  = "auto"        # auto / zh / en ...
+
+[llm]
+enabled  = true           # false 则直接输出原始识别文本,不调用 LLM
+base_url = "https://www.packyapi.com/v1"
+api_key  = "sk-在这里填你的key"
+model    = "deepseek-v4-flash"
+temperature = 0.2
+timeout_secs = 10         # 超时即回退原始识别文本
+skip_if_shorter_than = 4  # 文本短于该字符数时跳过 LLM
+# system_prompt = "自定义纠错提示词;留空则用内置默认"
+
+[inject]
+mode = "paste"            # 目前仅支持 paste
