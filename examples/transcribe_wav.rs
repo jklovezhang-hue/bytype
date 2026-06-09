@@ -41,7 +41,7 @@ fn main() -> anyhow::Result<()> {
         mono.len()
     );
 
-    let mut transcriber = Transcriber::load()?;
+    let mut transcriber = Transcriber::load("./models/sensevoice", "auto")?;
     let text = transcriber.transcribe(&mono, spec.sample_rate)?;
     println!("识别: {text}");
     Ok(())
