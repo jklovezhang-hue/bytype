@@ -4,3 +4,5 @@
 /run_stderr.log
 /run.pid
 /config.toml
+/node_modules
+/dist
