@@ -1,5 +1,7 @@
 //! TOML 配置。所有字段都有默认值,缺字段不报错,便于随时增减配置项。
 
+use std::path::{Path, PathBuf};
+
 use anyhow::Context;
 use serde::Deserialize;
 
@@ -228,11 +230,66 @@ impl Config {
             toml::from_str(&text).with_context(|| format!("解析配置文件失败: {path}"))?;
         Ok(cfg)
     }
+
+    /// 不依赖工作目录地加载:按 CWD → 程序目录 → 逐级父目录 查找 config.toml,
+    /// 并把相对的 `asr.model_dir` 解析到 config 所在目录,得到绝对路径。
+    pub fn load_resolved() -> anyhow::Result<Config> {
+        let (path, base) = find_config_file()?;
+        let mut cfg = Config::load(&path.to_string_lossy())?;
+        cfg.asr.model_dir = resolve_model_dir(&base, &cfg.asr.model_dir);
+        Ok(cfg)
+    }
+}
+
+/// 把相对的 model_dir 解析到 base 目录;绝对路径原样返回。
+pub fn resolve_model_dir(base: &Path, model_dir: &str) -> String {
+    let md = Path::new(model_dir);
+    if md.is_relative() {
+        base.join(md).to_string_lossy().to_string()
+    } else {
+        model_dir.to_string()
+    }
+}
+
+/// 查找 config.toml,返回 (文件路径, 所在目录)。
+/// 顺序:当前工作目录 → 可执行文件目录 → 其各级父目录。
+fn find_config_file() -> anyhow::Result<(PathBuf, PathBuf)> {
+    if let Ok(cwd) = std::env::current_dir() {
+        let c = cwd.join("config.toml");
+        if c.is_file() {
+            return Ok((c, cwd));
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        let mut dir = exe.parent();
+        while let Some(d) = dir {
+            let c = d.join("config.toml");
+            if c.is_file() {
+                return Ok((c, d.to_path_buf()));
+            }
+            dir = d.parent();
+        }
+    }
+    anyhow::bail!("找不到 config.toml(已查找工作目录与程序所在目录及其父目录)")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resolve_model_dir_makes_relative_absolute() {
+        let base = Path::new("C:\\base\\dir");
+        let r = resolve_model_dir(base, "./models/sensevoice");
+        assert!(r.contains("base"));
+        assert!(r.contains("models"));
+        assert!(Path::new(&r).is_absolute());
+        // 绝对路径原样返回
+        assert_eq!(
+            resolve_model_dir(base, "C:\\abs\\models"),
+            "C:\\abs\\models"
+        );
+    }
 
     #[test]
     fn parses_full_config() {

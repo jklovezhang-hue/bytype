@@ -33,13 +33,13 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            std::thread::spawn(|| match voice_input::config::Config::load("config.toml") {
+            std::thread::spawn(|| match voice_input::config::Config::load_resolved() {
                 Ok(cfg) => {
                     if let Err(e) = voice_input::engine::run(cfg) {
                         eprintln!("引擎退出: {e}");
                     }
                 }
-                Err(e) => eprintln!("读取 config.toml 失败: {e}"),
+                Err(e) => eprintln!("加载配置失败: {e}"),
             });
             Ok(())
         })
