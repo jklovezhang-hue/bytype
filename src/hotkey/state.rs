@@ -1,14 +1,16 @@
 /// 进入状态机的归一化事件。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
-    /// 主热键(左 Win)按下
-    HotkeyDown,
-    /// 主热键(左 Win)释放,附带本次按住时长(毫秒)
-    HotkeyUp { held_ms: u64 },
-    /// 修饰键(左 Alt)按下
-    AltDown,
-    /// 修饰键(左 Alt)释放
-    AltUp,
+    /// 主键按下
+    PrimaryDown,
+    /// 主键释放,附本次按住时长(毫秒)
+    PrimaryUp { held_ms: u64 },
+    /// 修饰键 A(翻译)按下/释放
+    ModADown,
+    ModAUp,
+    /// 修饰键 B(命令)按下/释放
+    ModBDown,
+    ModBUp,
     /// 其他任意键按下
     OtherDown,
 }
@@ -19,17 +21,15 @@ pub enum Action {
     None,
     StartRecording,
     CancelRecording,
-    /// 普通模式:识别 + LLM 整理后输出。
     StopAndTranscribe,
-    /// 翻译模式(Win+Alt):识别 + 去语气词 + 翻译成英文后输出。
     StopAndTranslate,
+    StopAndCommand,
     DiscardRecording,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Decision {
     pub action: Action,
-    /// 是否在钩子层吞掉该事件(return 1)
     pub suppress: bool,
 }
 
@@ -38,48 +38,63 @@ pub const MIN_HOLD_MS: u64 = 300;
 
 #[derive(Debug, Default)]
 pub struct HotkeyState {
-    /// 左 Win 是否按住。
     pressed: bool,
-    /// 本次按住期间出现过非 Alt 的其他键 → 视为组合键,取消录音。
     combo: bool,
-    /// 本次按住期间(左 Alt 已先按住或按住期间按下)→ 翻译模式。
-    alt_seen: bool,
-    /// 左 Alt 当前物理是否按住(跨 Win 边界跟踪)。
-    alt_down: bool,
-    /// 我们吞掉了一次 Alt 按下,需把其对应的 Alt 弹起也吞掉,
-    /// 保证系统不会看到"半截 Alt"(否则可能激活菜单)。
-    alt_swallowing: bool,
+    mod_a_seen: bool,
+    mod_b_seen: bool,
+    mod_a_down: bool,
+    mod_b_down: bool,
+    mod_a_swallow: bool,
+    mod_b_swallow: bool,
 }
 
 impl HotkeyState {
     pub fn handle(&mut self, event: Event) -> Decision {
         match event {
-            Event::HotkeyDown => {
+            Event::PrimaryDown => {
                 if self.pressed {
                     Decision { action: Action::None, suppress: false }
                 } else {
                     self.pressed = true;
                     self.combo = false;
-                    // 若 Alt 已先按住,本次即翻译模式。
-                    self.alt_seen = self.alt_down;
+                    self.mod_a_seen = self.mod_a_down;
+                    self.mod_b_seen = self.mod_b_down;
                     Decision { action: Action::StartRecording, suppress: false }
                 }
             }
-            Event::AltDown => {
-                self.alt_down = true;
+            Event::ModADown => {
+                self.mod_a_down = true;
                 if self.pressed && !self.combo {
-                    // Win 按住期间按下 Alt = 翻译模式;吞掉它,避免激活菜单/卡键。
-                    self.alt_seen = true;
-                    self.alt_swallowing = true;
+                    self.mod_a_seen = true;
+                    self.mod_a_swallow = true;
                     Decision { action: Action::None, suppress: true }
                 } else {
                     Decision { action: Action::None, suppress: false }
                 }
             }
-            Event::AltUp => {
-                self.alt_down = false;
-                if self.alt_swallowing {
-                    self.alt_swallowing = false;
+            Event::ModAUp => {
+                self.mod_a_down = false;
+                if self.mod_a_swallow {
+                    self.mod_a_swallow = false;
+                    Decision { action: Action::None, suppress: true }
+                } else {
+                    Decision { action: Action::None, suppress: false }
+                }
+            }
+            Event::ModBDown => {
+                self.mod_b_down = true;
+                if self.pressed && !self.combo {
+                    self.mod_b_seen = true;
+                    self.mod_b_swallow = true;
+                    Decision { action: Action::None, suppress: true }
+                } else {
+                    Decision { action: Action::None, suppress: false }
+                }
+            }
+            Event::ModBUp => {
+                self.mod_b_down = false;
+                if self.mod_b_swallow {
+                    self.mod_b_swallow = false;
                     Decision { action: Action::None, suppress: true }
                 } else {
                     Decision { action: Action::None, suppress: false }
@@ -93,19 +108,23 @@ impl HotkeyState {
                     Decision { action: Action::None, suppress: false }
                 }
             }
-            Event::HotkeyUp { held_ms } => {
+            Event::PrimaryUp { held_ms } => {
                 if !self.pressed {
                     return Decision { action: Action::None, suppress: false };
                 }
                 let was_combo = self.combo;
-                let was_translate = self.alt_seen;
+                let a = self.mod_a_seen;
+                let b = self.mod_b_seen;
                 self.pressed = false;
                 self.combo = false;
-                self.alt_seen = false;
+                self.mod_a_seen = false;
+                self.mod_b_seen = false;
                 if was_combo {
                     Decision { action: Action::None, suppress: false }
                 } else if held_ms >= MIN_HOLD_MS {
-                    let action = if was_translate {
+                    let action = if b {
+                        Action::StopAndCommand
+                    } else if a {
                         Action::StopAndTranslate
                     } else {
                         Action::StopAndTranscribe
@@ -124,131 +143,75 @@ mod tests {
     use super::*;
 
     #[test]
-    fn lone_press_then_release_transcribes_and_suppresses_up() {
+    fn primary_alone_transcribes() {
         let mut s = HotkeyState::default();
-        assert_eq!(
-            s.handle(Event::HotkeyDown),
-            Decision { action: Action::StartRecording, suppress: false }
-        );
-        assert_eq!(
-            s.handle(Event::HotkeyUp { held_ms: 1000 }),
-            Decision { action: Action::StopAndTranscribe, suppress: true }
-        );
+        assert_eq!(s.handle(Event::PrimaryDown), Decision { action: Action::StartRecording, suppress: false });
+        assert_eq!(s.handle(Event::PrimaryUp { held_ms: 1000 }), Decision { action: Action::StopAndTranscribe, suppress: true });
     }
 
     #[test]
-    fn too_short_lone_press_discards_but_still_suppresses() {
+    fn too_short_discards() {
         let mut s = HotkeyState::default();
-        s.handle(Event::HotkeyDown);
-        assert_eq!(
-            s.handle(Event::HotkeyUp { held_ms: 100 }),
-            Decision { action: Action::DiscardRecording, suppress: true }
-        );
+        s.handle(Event::PrimaryDown);
+        assert_eq!(s.handle(Event::PrimaryUp { held_ms: 100 }), Decision { action: Action::DiscardRecording, suppress: true });
     }
 
     #[test]
-    fn other_key_makes_it_a_combo_and_cancels() {
+    fn primary_plus_mod_a_translates_and_swallows() {
         let mut s = HotkeyState::default();
-        s.handle(Event::HotkeyDown);
-        assert_eq!(
-            s.handle(Event::OtherDown),
-            Decision { action: Action::CancelRecording, suppress: false }
-        );
-        assert_eq!(
-            s.handle(Event::HotkeyUp { held_ms: 1000 }),
-            Decision { action: Action::None, suppress: false }
-        );
+        s.handle(Event::PrimaryDown);
+        assert_eq!(s.handle(Event::ModADown), Decision { action: Action::None, suppress: true });
+        assert_eq!(s.handle(Event::ModAUp), Decision { action: Action::None, suppress: true });
+        assert_eq!(s.handle(Event::PrimaryUp { held_ms: 1000 }), Decision { action: Action::StopAndTranslate, suppress: true });
     }
 
     #[test]
-    fn repeated_down_while_held_is_noop() {
+    fn primary_plus_mod_b_commands_and_swallows() {
         let mut s = HotkeyState::default();
-        s.handle(Event::HotkeyDown);
-        assert_eq!(
-            s.handle(Event::HotkeyDown),
-            Decision { action: Action::None, suppress: false }
-        );
+        s.handle(Event::PrimaryDown);
+        assert_eq!(s.handle(Event::ModBDown), Decision { action: Action::None, suppress: true });
+        assert_eq!(s.handle(Event::ModBUp), Decision { action: Action::None, suppress: true });
+        assert_eq!(s.handle(Event::PrimaryUp { held_ms: 1000 }), Decision { action: Action::StopAndCommand, suppress: true });
     }
 
     #[test]
-    fn other_key_when_not_pressed_is_ignored() {
+    fn command_beats_translate_when_both_held() {
         let mut s = HotkeyState::default();
-        assert_eq!(
-            s.handle(Event::OtherDown),
-            Decision { action: Action::None, suppress: false }
-        );
+        s.handle(Event::PrimaryDown);
+        s.handle(Event::ModADown);
+        s.handle(Event::ModBDown);
+        assert_eq!(s.handle(Event::PrimaryUp { held_ms: 1000 }), Decision { action: Action::StopAndCommand, suppress: true });
     }
 
     #[test]
-    fn win_then_alt_translates_and_swallows_alt_down_and_up() {
+    fn mod_a_held_before_primary_translates() {
         let mut s = HotkeyState::default();
-        assert_eq!(
-            s.handle(Event::HotkeyDown),
-            Decision { action: Action::StartRecording, suppress: false }
-        );
-        // Win 按住期间按 Alt:吞掉、进翻译模式
-        assert_eq!(
-            s.handle(Event::AltDown),
-            Decision { action: Action::None, suppress: true }
-        );
-        // Alt 先于 Win 松开:对应弹起也要吞掉
-        assert_eq!(
-            s.handle(Event::AltUp),
-            Decision { action: Action::None, suppress: true }
-        );
-        // Win 松开:翻译 + 吞掉物理弹起
-        assert_eq!(
-            s.handle(Event::HotkeyUp { held_ms: 1000 }),
-            Decision { action: Action::StopAndTranslate, suppress: true }
-        );
+        assert_eq!(s.handle(Event::ModADown), Decision { action: Action::None, suppress: false });
+        s.handle(Event::PrimaryDown);
+        assert_eq!(s.handle(Event::PrimaryUp { held_ms: 1000 }), Decision { action: Action::StopAndTranslate, suppress: true });
     }
 
     #[test]
-    fn alt_held_before_win_also_translates() {
+    fn other_key_cancels_as_combo() {
         let mut s = HotkeyState::default();
-        // Alt 先按(Win 未按住)→ 不吞、放行
-        assert_eq!(
-            s.handle(Event::AltDown),
-            Decision { action: Action::None, suppress: false }
-        );
-        // 再按 Win → 因 Alt 已按住,进翻译模式
-        assert_eq!(
-            s.handle(Event::HotkeyDown),
-            Decision { action: Action::StartRecording, suppress: false }
-        );
-        assert_eq!(
-            s.handle(Event::HotkeyUp { held_ms: 1000 }),
-            Decision { action: Action::StopAndTranslate, suppress: true }
-        );
+        s.handle(Event::PrimaryDown);
+        assert_eq!(s.handle(Event::OtherDown), Decision { action: Action::CancelRecording, suppress: false });
+        assert_eq!(s.handle(Event::PrimaryUp { held_ms: 1000 }), Decision { action: Action::None, suppress: false });
     }
 
     #[test]
-    fn alt_outside_hold_is_not_suppressed() {
+    fn mods_outside_hold_pass_through() {
         let mut s = HotkeyState::default();
-        // 纯粹按 Alt(没按 Win):放行,不吞,不影响正常 Alt 用法
-        assert_eq!(
-            s.handle(Event::AltDown),
-            Decision { action: Action::None, suppress: false }
-        );
-        assert_eq!(
-            s.handle(Event::AltUp),
-            Decision { action: Action::None, suppress: false }
-        );
+        assert_eq!(s.handle(Event::ModADown), Decision { action: Action::None, suppress: false });
+        assert_eq!(s.handle(Event::ModBDown), Decision { action: Action::None, suppress: false });
+        assert_eq!(s.handle(Event::ModAUp), Decision { action: Action::None, suppress: false });
+        assert_eq!(s.handle(Event::ModBUp), Decision { action: Action::None, suppress: false });
     }
 
     #[test]
-    fn alt_during_combo_is_not_translate() {
-        // 已经因其他键变成 combo 后再按 Alt,不应吞、也不进翻译
+    fn repeated_primary_down_is_noop() {
         let mut s = HotkeyState::default();
-        s.handle(Event::HotkeyDown);
-        s.handle(Event::OtherDown); // combo
-        assert_eq!(
-            s.handle(Event::AltDown),
-            Decision { action: Action::None, suppress: false }
-        );
-        assert_eq!(
-            s.handle(Event::HotkeyUp { held_ms: 1000 }),
-            Decision { action: Action::None, suppress: false }
-        );
+        s.handle(Event::PrimaryDown);
+        assert_eq!(s.handle(Event::PrimaryDown), Decision { action: Action::None, suppress: false });
     }
 }
