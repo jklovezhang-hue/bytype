@@ -3,3 +3,4 @@
 /run_stdout.log
 /run_stderr.log
 /run.pid
+/config.toml
