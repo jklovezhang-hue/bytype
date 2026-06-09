@@ -31,9 +31,9 @@ fn main() -> anyhow::Result<()> {
 
     let corrector = Corrector::new(config.llm)?;
     let fixed = if do_translate {
-        corrector.translate(&raw)
+        corrector.translate(&raw, None)
     } else {
-        corrector.correct(&raw)
+        corrector.correct(&raw, None)
     };
     println!("{}: {fixed}", if do_translate { "翻译" } else { "修整" });
     Ok(())

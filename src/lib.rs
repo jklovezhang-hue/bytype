@@ -1,3 +1,4 @@
+pub mod engine;
 pub mod hotkey;
 pub mod audio;
 pub mod asr;
