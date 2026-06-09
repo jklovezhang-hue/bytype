@@ -35,3 +35,7 @@ mode = "paste"            # 目前仅支持 paste
 # [[app_style]]
 # match = "code"
 # style = "保留代码与技术术语原文。"
+
+[overlay]
+# 是否显示录音浮窗(底部正中的波形药丸)。false 则不弹。
+enabled = true

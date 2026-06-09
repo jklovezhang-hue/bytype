@@ -15,6 +15,7 @@ pub struct Config {
     pub inject: InjectConfig,
     #[serde(default)]
     pub app_style: Vec<AppStyle>,
+    pub overlay: OverlayConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -64,6 +65,7 @@ impl Default for Config {
             llm: LlmConfig::default(),
             inject: InjectConfig::default(),
             app_style: Vec::new(),
+            overlay: OverlayConfig::default(),
         }
     }
 }
@@ -99,6 +101,19 @@ impl Default for LlmConfig {
 impl Default for InjectConfig {
     fn default() -> Self {
         InjectConfig { mode: "paste".into() }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct OverlayConfig {
+    /// 是否显示录音浮窗。false 则完全不弹(引擎逻辑不受影响)。
+    pub enabled: bool,
+}
+
+impl Default for OverlayConfig {
+    fn default() -> Self {
+        OverlayConfig { enabled: true }
     }
 }
 
@@ -412,5 +427,17 @@ style = "技术"
         assert!(llm.effective_command_prompt().contains("文本编辑器"));
         llm.command_prompt = "自定义命令".into();
         assert_eq!(llm.effective_command_prompt(), "自定义命令");
+    }
+
+    #[test]
+    fn overlay_defaults_enabled_true() {
+        let cfg: Config = toml::from_str("").unwrap();
+        assert!(cfg.overlay.enabled);
+    }
+
+    #[test]
+    fn overlay_can_be_disabled() {
+        let cfg: Config = toml::from_str("[overlay]\nenabled = false\n").unwrap();
+        assert!(!cfg.overlay.enabled);
     }
 }
