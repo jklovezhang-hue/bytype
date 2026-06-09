@@ -62,7 +62,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
 
     if let Some(kind) = kind {
         if let Some(ctx_lock) = CTX.get() {
-            let mut ctx = ctx_lock.lock().unwrap();
+            let mut ctx = ctx_lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             let ev = match kind {
                 EventKind::Down => {
                     if ctx.down_at.is_none() {
