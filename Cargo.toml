@@ -1,0 +1,27 @@
+[package]
+name = "voice-input"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "voice_input"
+path = "src/lib.rs"
+
+[[bin]]
+name = "voice-input"
+path = "src/main.rs"
+
+[dependencies]
+cpal = "0.15"
+arboard = "3"
+sherpa-rs = "0.6"
+crossbeam-channel = "0.5"
+
+[dependencies.windows]
+version = "0.58"
+features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_LibraryLoader",
+]
