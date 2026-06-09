@@ -15,6 +15,7 @@ use crate::foreground::foreground_process_name;
 use crate::hotkey::{self, HotkeyAction};
 use crate::inject::inject_text;
 use crate::keys::vk_from_name;
+use crate::sound::SoundPlayer;
 
 /// 浮窗要展示的状态。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,12 +93,20 @@ pub fn run_with(config: Config, observer: Arc<dyn EngineObserver>) -> anyhow::Re
         }
     });
 
+    let player = if config.sound.enabled {
+        Some(SoundPlayer::from_config(&config.sound))
+    } else {
+        None
+    };
     let mut recorder: Option<Recorder> = None;
     for action in rx.iter() {
         match action {
             HotkeyAction::StartRecording => match Recorder::start() {
                 Ok(r) => {
                     recorder = Some(r);
+                    if let Some(p) = &player {
+                        p.play_start();
+                    }
                     observer.on_state(OverlayState::Recording);
                 }
                 Err(e) => {
@@ -121,6 +130,9 @@ pub fn run_with(config: Config, observer: Arc<dyn EngineObserver>) -> anyhow::Re
                 // recorder 之后才到达,本轮会照常完成并发 Done;那条迟到的
                 // CancelRecording 因 recorder 已为 None 被上面的 was_recording 守卫忽略。
                 let Some(r) = recorder.take() else { continue };
+                if let Some(p) = &player {
+                    p.play_end();
+                }
                 observer.on_state(OverlayState::Processing);
                 let (samples, rate) = r.stop();
                 let raw = match transcriber.transcribe(&samples, rate) {
