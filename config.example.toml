@@ -1,9 +1,11 @@
-# 复制本文件为 config.toml 并填入你的中转站信息。
-# 改完保存后重启程序生效。
+# 复制本文件为 config.toml 并填入你的中转站信息。改完保存后重启程序生效。
 #
-# 热键:按住【左 Win】说话 = 识别 + 整理;按住【左 Win + 左 Alt】说话 = 翻译成英文。
+# 热键:按住【主键】说话=识别整理;主键+翻译键=译成英文;主键+命令键=对选中文字执行语音命令。
 
-hotkey = "LWin"          # 触发热键(阶段三可改;目前固定左 Win)
+[hotkey]
+primary            = "LWin"   # 可用:LWin RWin LAlt RAlt LCtrl RCtrl LShift RShift
+translate_modifier = "LAlt"
+command_modifier   = "LCtrl"
 
 [asr]
 model_dir = "./models/sensevoice"
@@ -14,15 +16,22 @@ enabled  = true           # false 则直接输出原始识别文本,不调用 LL
 base_url = "https://www.packyapi.com/v1"
 api_key  = "sk-在这里填你的key"
 model    = "deepseek-v4-flash"
-# 整理力度:clean(只去口语词+纠错+标点) / polish(再解决自我更正、理顺成通顺最终话) / summary(提炼要点,可精简改写)
-mode = "polish"
-temperature = 0.0         # 0 = 同输入尽量同输出,稳定性最好
-timeout_secs = 10         # 超时即回退原始识别文本
-skip_if_shorter_than = 4  # 文本短于该字符数时跳过 LLM
-# 自定义提示词;非空则覆盖上面的 mode 预设。留空则用 mode 预设。
-# system_prompt = ""
-# 翻译模式(左 Win+左 Alt)提示词;留空则用内置默认(去语气词+译成英文,纯英文则润色纠语法)。
-# translate_prompt = ""
+mode = "polish"           # clean / polish / summary
+temperature = 0.0
+timeout_secs = 10
+skip_if_shorter_than = 4
+vocabulary = []           # 专有名词,如 ["Kubernetes", "OneDrive"];优先按此拼写
+# system_prompt = ""       # 非空则覆盖 mode 预设
+# translate_prompt = ""    # 翻译模式提示词;留空用内置默认
+# command_prompt = ""      # 命令模式提示词;留空用内置默认
 
 [inject]
 mode = "paste"            # 目前仅支持 paste
+
+# 随应用风格(可多条);按前台进程名包含匹配,取第一条命中
+# [[app_style]]
+# match = "outlook"
+# style = "用正式、专业的书面语。"
+# [[app_style]]
+# match = "code"
+# style = "保留代码与技术术语原文。"

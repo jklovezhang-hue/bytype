@@ -19,23 +19,54 @@ impl Corrector {
         Ok(Corrector { client, cfg })
     }
 
-    /// 普通整理。禁用 / 文本过短 / 网络失败 / 空响应 → 返回原文(绝不丢输入)。
-    pub fn correct(&self, raw: &str) -> String {
-        self.process(raw, &self.cfg.effective_system_prompt())
+    /// 普通整理。`style` 为可选的应用风格指令。失败回退原文。
+    pub fn correct(&self, raw: &str, style: Option<&str>) -> String {
+        let sys = compose_system_prompt(
+            &self.cfg.effective_system_prompt(),
+            self.cfg.vocabulary_line().as_deref(),
+            style,
+        );
+        self.process(raw, &sys)
     }
 
-    /// 翻译(去语气词 + 译成英文)。同样在失败时回退原文。
-    pub fn translate(&self, raw: &str) -> String {
-        self.process(raw, &self.cfg.effective_translate_prompt())
+    /// 翻译成英文。`style` 为可选的应用风格指令。失败回退原文。
+    pub fn translate(&self, raw: &str, style: Option<&str>) -> String {
+        let sys = compose_system_prompt(
+            &self.cfg.effective_translate_prompt(),
+            self.cfg.vocabulary_line().as_deref(),
+            style,
+        );
+        self.process(raw, &sys)
     }
 
-    /// 用给定系统提示词处理文本;任何不利情况都回退原文。
+    /// 命令模式:把 `instruction` 应用到 `selected`。失败回退原选中文本。
+    pub fn command(&self, instruction: &str, selected: &str) -> String {
+        if !self.cfg.enabled {
+            return selected.to_string();
+        }
+        let sys = compose_system_prompt(
+            &self.cfg.effective_command_prompt(),
+            self.cfg.vocabulary_line().as_deref(),
+            None,
+        );
+        let user = format!("指令:{}\n\n文本:\n{}", instruction.trim(), selected);
+        match self.try_chat(&sys, &user) {
+            Ok(t) if !t.trim().is_empty() => t,
+            Ok(_) => selected.to_string(),
+            Err(e) => {
+                eprintln!("LLM 命令失败,保留原文: {e}");
+                selected.to_string()
+            }
+        }
+    }
+
+    /// 用给定系统提示词处理文本(用户消息即文本本身);失败回退原文。
     fn process(&self, raw: &str, system_prompt: &str) -> String {
         let trimmed = raw.trim();
         if !self.cfg.enabled || trimmed.chars().count() < self.cfg.skip_if_shorter_than {
             return raw.to_string();
         }
-        match self.try_process(trimmed, system_prompt) {
+        match self.try_chat(system_prompt, trimmed) {
             Ok(t) if !t.trim().is_empty() => t,
             Ok(_) => raw.to_string(),
             Err(e) => {
@@ -45,9 +76,9 @@ impl Corrector {
         }
     }
 
-    fn try_process(&self, raw: &str, system_prompt: &str) -> anyhow::Result<String> {
+    fn try_chat(&self, system_prompt: &str, user_text: &str) -> anyhow::Result<String> {
         let url = format!("{}/chat/completions", self.cfg.base_url.trim_end_matches('/'));
-        let body = build_request_body(&self.cfg, system_prompt, raw);
+        let body = build_request_body(&self.cfg, system_prompt, user_text);
         let resp = self
             .client
             .post(&url)
@@ -59,6 +90,22 @@ impl Corrector {
         parse_response(&value)
             .ok_or_else(|| anyhow::anyhow!("响应缺少 choices[0].message.content"))
     }
+}
+
+/// 把词库行、应用风格依次拼到基础系统提示词后面(空项跳过)。
+pub fn compose_system_prompt(
+    base: &str,
+    vocabulary_line: Option<&str>,
+    style: Option<&str>,
+) -> String {
+    let mut s = base.to_string();
+    for extra in [vocabulary_line, style].into_iter().flatten() {
+        if !extra.trim().is_empty() {
+            s.push_str("\n\n");
+            s.push_str(extra.trim());
+        }
+    }
+    s
 }
 
 /// 构造 chat/completions 请求体。
@@ -128,7 +175,7 @@ mod tests {
         let mut c = cfg();
         c.enabled = false;
         let corrector = Corrector::new(c).unwrap();
-        assert_eq!(corrector.correct("原始文本"), "原始文本");
+        assert_eq!(corrector.correct("原始文本", None), "原始文本");
     }
 
     #[test]
@@ -137,6 +184,27 @@ mod tests {
         c.enabled = true;
         c.skip_if_shorter_than = 10;
         let corrector = Corrector::new(c).unwrap();
-        assert_eq!(corrector.correct("嗯"), "嗯");
+        assert_eq!(corrector.correct("嗯", None), "嗯");
+    }
+
+    #[test]
+    fn compose_appends_vocab_and_style() {
+        let s = compose_system_prompt("BASE", Some("VOCAB"), Some("STYLE"));
+        assert!(s.starts_with("BASE"));
+        assert!(s.contains("VOCAB"));
+        assert!(s.contains("STYLE"));
+    }
+
+    #[test]
+    fn compose_skips_empty() {
+        assert_eq!(compose_system_prompt("BASE", None, Some("  ")), "BASE");
+    }
+
+    #[test]
+    fn command_disabled_returns_selected() {
+        let mut c = cfg();
+        c.enabled = false;
+        let corrector = Corrector::new(c).unwrap();
+        assert_eq!(corrector.command("改短", "一段很长的文本"), "一段很长的文本");
     }
 }
