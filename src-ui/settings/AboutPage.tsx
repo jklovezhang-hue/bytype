@@ -18,11 +18,17 @@ export default function AboutPage({ cfgPath }: { cfgPath: string | null }) {
     try {
       await navigator.clipboard.writeText(EMAIL);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
     } catch {
       // 剪贴板不可用时静默;用户可手动选中复制
     }
   };
+
+  // 「已复制 ✓」1.5 秒后还原;组件卸载时取消计时器。
+  useEffect(() => {
+    if (!copied) return;
+    const id = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(id);
+  }, [copied]);
 
   return (
     <div className="flex flex-col gap-6">
