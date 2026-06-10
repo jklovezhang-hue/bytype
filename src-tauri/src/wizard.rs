@@ -60,6 +60,10 @@ pub fn check_dependencies() -> Vec<DepCheck> {
 /// 用资源管理器打开 URL(支持 http(s) 与 ms-settings: 协议)。
 #[tauri::command]
 pub fn open_external(url: String) -> Result<(), String> {
+    // 仅放行 https 与 ms-settings(向导只会传这两类固定链接),防止任意路径被 explorer 当项打开。
+    if !(url.starts_with("https://") || url.starts_with("ms-settings:")) {
+        return Err(format!("拒绝打开非白名单 URL: {url}"));
+    }
     std::process::Command::new("explorer")
         .arg(&url)
         .spawn()
@@ -87,8 +91,13 @@ fn vcredist_check() -> DepCheck {
 #[cfg(windows)]
 fn vcredist_installed() -> bool {
     use windows::core::w;
-    use windows::Win32::System::LibraryLoader::LoadLibraryW;
-    unsafe { LoadLibraryW(w!("vcruntime140.dll")).is_ok() || LoadLibraryW(w!("vcruntime140_1.dll")).is_ok() }
+    use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+    // 程序自身链接 MSVC 运行时,运行时该 dll 必已加载;GetModuleHandleW 查已加载模块,
+    // 不增引用计数(LoadLibraryW 会泄漏一个引用)。
+    unsafe {
+        GetModuleHandleW(w!("vcruntime140.dll")).is_ok()
+            || GetModuleHandleW(w!("vcruntime140_1.dll")).is_ok()
+    }
 }
 #[cfg(not(windows))]
 fn vcredist_installed() -> bool {
