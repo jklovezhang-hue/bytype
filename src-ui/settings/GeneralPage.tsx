@@ -8,13 +8,24 @@ export default function GeneralPage({ cfg, set }: PageProps) {
   // 开机自启走 autostart 插件(注册表),立即生效,不进 config.toml、不参与脏检查。
   const [autoStart, setAutoStart] = useState(false);
   const [autoErr, setAutoErr] = useState<string | null>(null);
+  const [autoBusy, setAutoBusy] = useState(false);
 
   useEffect(() => {
-    isEnabled().then(setAutoStart).catch(() => {});
+    let alive = true;
+    isEnabled()
+      .then((v) => {
+        if (alive) setAutoStart(v);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const toggleAutostart = async (v: boolean) => {
+    if (autoBusy) return; // IPC 进行中忽略再次点击,避免乐观状态与注册表实际值竞态
     setAutoErr(null);
+    setAutoBusy(true);
     setAutoStart(v); // 乐观切换
     try {
       if (v) await enable();
@@ -22,6 +33,8 @@ export default function GeneralPage({ cfg, set }: PageProps) {
     } catch (e) {
       setAutoStart(!v); // 失败回弹
       setAutoErr(String(e));
+    } finally {
+      setAutoBusy(false);
     }
   };
 
@@ -40,9 +53,9 @@ export default function GeneralPage({ cfg, set }: PageProps) {
         />
       </Row>
       <Row label="开机自启" sub="登录 Windows 后自动在后台运行(立即生效,无需保存)">
-        {autoErr && <span className="text-xs text-red-600">{autoErr}</span>}
         <Toggle checked={autoStart} onChange={toggleAutostart} />
       </Row>
+      {autoErr && <p className="text-xs text-red-600 -mt-1">{autoErr}</p>}
       <Row label="识别语言" sub="SenseVoice 识别语种">
         <SelectBox
           value={cfg.asr.language}
