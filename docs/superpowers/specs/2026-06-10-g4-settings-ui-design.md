@@ -55,7 +55,8 @@
 
 - 开机自启:官方 `tauri-plugin-autostart` 插件。前端用 `@tauri-apps/plugin-autostart` 的
   `enable/disable/isEnabled`,**切换立即生效**(注册表 Run 键),不进 config.toml、不参与脏检查。
-- 自定义命令无需 capability;autostart 插件权限要加进 `capabilities/default.json`(main 窗口)。
+- 自定义命令无需 capability;autostart 插件权限放进**新建的 `capabilities/main.json`**(仅 main 窗口,
+  最小权限——浮窗不应拿到 autostart 能力;default.json 保持 core:default 不变)。
 
 ### 前端(src-ui/)
 
@@ -135,7 +136,7 @@ src-ui/
 
 - src-tauri/Cargo.toml:`tauri-plugin-autostart = "2"`;lib.rs 注册插件并挂新命令。
 - package.json:`@tauri-apps/plugin-autostart`。
-- src-tauri/capabilities/default.json:main 窗口加 `autostart:default` 权限。
+- src-tauri/capabilities/main.json(新建):main 窗口专属 `autostart:default` 权限(default.json 不动)。
 - 根 crate:dev-dependencies 加 `image`(仅 gen_icon example 用)。
 - tailwind.config:`darkMode: "class"`;前端加 `settings/theme.ts`(读写 localStorage + 挂 `.dark` 根类
   + 跟随系统监听),全部设置组件补 `dark:` 变体。
