@@ -1,0 +1,21 @@
+export interface Release {
+  version: string;
+  date: string;
+  items: string[];
+}
+
+/** 版本说明(新版本加在数组最前)。 */
+export const CHANGELOG: Release[] = [
+  {
+    version: "0.1.0",
+    date: "2026-06-10",
+    items: [
+      "按住热键说话即输入:本地 SenseVoice 识别 + LLM 整理",
+      "翻译热键:说中文,输出英文",
+      "命令热键:对选中文字执行语音指令",
+      "录音浮窗:计时药丸,点它或按 Esc 取消",
+      "录音开始/结束提示音",
+      "设置界面(本页所在的这一套)",
+    ],
+  },
+];
