@@ -46,3 +46,8 @@ enabled = true
 enabled = true
 start_sound = ""
 end_sound = ""
+
+[model]
+# 语音识别模型下载源(首启向导用;留空走内置默认 hf-mirror 镜像)。下载的 int8 模型存为 model.onnx。
+model_url  = "https://hf-mirror.com/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/model.int8.onnx"
+tokens_url = "https://hf-mirror.com/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/tokens.txt"
