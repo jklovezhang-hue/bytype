@@ -21,7 +21,7 @@ export interface LlmConfig {
   system_prompt: string;
   translate_prompt: string;
   command_prompt: string;
-  temperature: number;
+  temperature: number; // Rust 端为 f32;UI 步进 0.1,不会出现精度往返问题
   timeout_secs: number;
   skip_if_shorter_than: number;
   vocabulary: string[];

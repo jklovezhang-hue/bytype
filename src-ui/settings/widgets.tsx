@@ -27,6 +27,8 @@ export function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: 
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={checked}
       onClick={() => onChange(!checked)}
       className={`w-10 h-[22px] rounded-full relative transition-colors ${checked ? "bg-blue-500" : "bg-neutral-300"}`}
     >
@@ -60,17 +62,24 @@ export function NumberInput({
   max?: number;
   step?: number;
 }) {
+  // 本地保留原始输入串:用户删光时不立刻上抛 0,失焦后回弹为外部值。
+  const [raw, setRaw] = useState(String(value));
+  React.useEffect(() => {
+    setRaw(String(value));
+  }, [value]);
   return (
     <input
       type="number"
-      value={value}
+      value={raw}
       min={min}
       max={max}
       step={step}
       onChange={(e) => {
+        setRaw(e.target.value);
         const n = Number(e.target.value);
-        if (!Number.isNaN(n)) onChange(n);
+        if (e.target.value !== "" && !Number.isNaN(n)) onChange(n);
       }}
+      onBlur={() => setRaw(String(value))}
       className="border border-neutral-300 rounded-md px-2.5 py-1.5 text-sm w-24 focus:outline-none focus:border-blue-500"
     />
   );
@@ -107,7 +116,7 @@ export function Collapsible({ title, children }: { title: string; children: Reac
   const [open, setOpen] = useState(false);
   return (
     <div className="border-t border-dashed border-neutral-200 pt-3">
-      <button type="button" onClick={() => setOpen(!open)} className="text-sm text-neutral-500 hover:text-neutral-700">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="text-sm text-neutral-500 hover:text-neutral-700">
         {open ? "▾" : "▸"} {title}
       </button>
       {open && <div className="mt-3 flex flex-col gap-3">{children}</div>}
