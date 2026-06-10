@@ -6,3 +6,4 @@ export const saveConfig = (config: Config) => invoke<void>("save_config", { conf
 export const testLlm = (llm: LlmConfig) => invoke<TestOk>("test_llm", { llm });
 export const restartApp = () => invoke<void>("restart_app");
 export const openConfigDir = () => invoke<void>("open_config_dir");
+export const openExternal = (url: string) => invoke<void>("open_external", { url });
