@@ -87,3 +87,8 @@ fn push_mono<T: Copy>(
         b.push(sum / channels as f32);
     }
 }
+
+/// 是否存在可用的麦克风输入设备(供首启依赖检测用)。
+pub fn has_input_device() -> bool {
+    cpal::default_host().default_input_device().is_some()
+}
