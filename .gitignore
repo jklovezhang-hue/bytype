@@ -8,3 +8,4 @@
 /dist
 /.superpowers
 /src-tauri/gen
+/src-tauri/runtime

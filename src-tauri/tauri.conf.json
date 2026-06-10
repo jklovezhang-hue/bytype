@@ -36,7 +36,19 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
-    "icon": ["icons/icon.png", "icons/icon.ico"]
+    "targets": ["nsis"],
+    "icon": ["icons/icon.png", "icons/icon.ico"],
+    "publisher": "Yong Zhang",
+    "copyright": "© 2026 Yong Zhang. 保留所有权利。",
+    "shortDescription": "按住说话的语音输入工具",
+    "longDescription": "ByType——按住热键说话,本地 SenseVoice 识别 + LLM 整理,松手即把文字注入当前应用。",
+    "resources": { "runtime/*.dll": "./" },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["SimpChinese", "English"],
+        "displayLanguageSelector": false
+      }
+    }
   }
 }
