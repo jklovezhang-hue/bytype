@@ -125,7 +125,10 @@ fn start_engine(app: &tauri::AppHandle) {
                 }
             });
         }
-        Err(e) => eprintln!("加载配置失败: {e}"),
+        Err(e) => {
+            eprintln!("加载配置失败: {e}");
+            started.0.store(false, Ordering::SeqCst); // 回滚 once 守卫,避免损坏 config 时永久锁死
+        }
     }
 }
 
