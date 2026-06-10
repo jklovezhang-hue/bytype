@@ -1,10 +1,20 @@
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import { openConfigDir } from "./api";
+import { openConfigDir, openExternal } from "./api";
 import { Section } from "./widgets";
 import iconUrl from "../../src-tauri/icons/icon.png";
 
 const EMAIL = "jklover2025@outlook.com";
+
+const CREDITS: { name: string; license: string; url: string }[] = [
+  { name: "ONNX Runtime", license: "MIT", url: "https://github.com/microsoft/onnxruntime" },
+  { name: "sherpa-onnx", license: "Apache-2.0", url: "https://github.com/k2-fsa/sherpa-onnx" },
+  { name: "SenseVoice 语音识别模型", license: "见上游许可", url: "https://github.com/FunAudioLLM/SenseVoice" },
+  { name: "Tauri", license: "Apache-2.0 / MIT", url: "https://github.com/tauri-apps/tauri" },
+  { name: "React", license: "MIT", url: "https://react.dev" },
+  { name: "Tailwind CSS", license: "MIT", url: "https://tailwindcss.com" },
+  { name: "Vite", license: "MIT", url: "https://vitejs.dev" },
+];
 
 export default function AboutPage({ cfgPath }: { cfgPath: string | null }) {
   const [version, setVersion] = useState("…");
@@ -70,7 +80,29 @@ export default function AboutPage({ cfgPath }: { cfgPath: string | null }) {
           </button>
         </div>
       </Section>
-      <p className="text-xs text-neutral-400">第三方开源组件致谢将在正式安装版中提供。</p>
+      <Section title="第三方开源致谢">
+        <ul className="flex flex-col gap-1.5">
+          {CREDITS.map((c) => (
+            <li
+              key={c.name}
+              className="text-sm text-neutral-700 dark:text-neutral-300 flex items-center gap-2 flex-wrap"
+            >
+              <span>{c.name}</span>
+              <span className="text-xs text-neutral-400">{c.license}</span>
+              <button
+                type="button"
+                onClick={() => openExternal(c.url)}
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                打开
+              </button>
+            </li>
+          ))}
+        </ul>
+        <p className="text-xs text-neutral-400 mt-2">
+          以及 cpal、arboard、reqwest、serde 等众多 Rust / Node 开源库(MIT / Apache-2.0)。
+        </p>
+      </Section>
     </div>
   );
 }

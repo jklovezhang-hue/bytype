@@ -7,6 +7,15 @@ export interface Release {
 /** 版本说明(新版本加在数组最前)。 */
 export const CHANGELOG: Release[] = [
   {
+    version: "1.0.0",
+    date: "2026-06-10",
+    items: [
+      "首次运行向导:依赖检测 + 模型在线下载 / 本地导入",
+      "可视化安装程序(正式发布)",
+      "关于页第三方开源致谢",
+    ],
+  },
+  {
     version: "0.1.0",
     date: "2026-06-10",
     items: [
