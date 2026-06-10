@@ -1,4 +1,5 @@
 mod settings;
+mod wizard;
 
 use std::sync::{Arc, Mutex};
 
@@ -123,7 +124,10 @@ pub fn run() {
             settings::save_config,
             settings::test_llm,
             settings::restart_app,
-            settings::open_config_dir
+            settings::open_config_dir,
+            wizard::wizard_state,
+            wizard::check_dependencies,
+            wizard::open_external
         ])
         .setup(|app| {
             let settings = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)?;
