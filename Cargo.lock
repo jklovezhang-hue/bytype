@@ -562,6 +562,7 @@ name = "bytype"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "serde",
  "tauri",
  "tauri-build",
  "tauri-plugin-autostart",
