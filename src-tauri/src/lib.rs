@@ -1,6 +1,7 @@
 mod settings;
 mod wizard;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use tauri::{
@@ -21,6 +22,10 @@ const OVERLAY_BOTTOM_MARGIN: f64 = 80.0;
 /// 存放引擎交回的取消句柄,供 cancel_recording 命令使用。
 #[derive(Default)]
 struct ControlSlot(Mutex<Option<ControlHandle>>);
+
+/// 引擎是否已启动(防止 setup 与 finish_wizard 重复启动钩子/录音器)。
+#[derive(Default)]
+struct EngineStarted(AtomicBool);
 
 /// 前端点药丸时调用:请求取消当前录音(跳过 LLM)。
 #[tauri::command]
@@ -103,6 +108,58 @@ fn apply_no_activate(w: &WebviewWindow) {
 #[cfg(not(windows))]
 fn apply_no_activate(_w: &WebviewWindow) {}
 
+/// 启动听写引擎(只启动一次)。就绪 setup 与向导完成都经此入口。
+fn start_engine(app: &tauri::AppHandle) {
+    let started = app.state::<EngineStarted>();
+    if started.0.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        return; // 已启动过,忽略
+    }
+    let app_handle = app.clone();
+    match Config::load_resolved() {
+        Ok(cfg) => {
+            let enabled = cfg.overlay.enabled;
+            let observer = Arc::new(TauriObserver { app: app_handle, enabled });
+            std::thread::spawn(move || {
+                if let Err(e) = voice_input::engine::run_with(cfg, observer) {
+                    eprintln!("引擎退出: {e}");
+                }
+            });
+        }
+        Err(e) => eprintln!("加载配置失败: {e}"),
+    }
+}
+
+/// 向导「完成」:用向导填的 LLM 值更新(或创建)config.toml,然后当场启动引擎。
+#[tauri::command]
+fn finish_wizard(
+    app: tauri::AppHandle,
+    llm: voice_input::config::LlmConfig,
+) -> Result<(), String> {
+    // 读现有(无则默认),只覆盖 [llm],保留其它字段。
+    let (mut cfg, path) = match Config::load_raw() {
+        Ok((c, p)) => (c, p),
+        Err(_) => {
+            let dir = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+                .ok_or("无法确定程序目录")?;
+            (Config::default(), dir.join("config.toml"))
+        }
+    };
+    let mut llm = llm;
+    if llm.api_key.trim().is_empty() {
+        llm.enabled = false; // 没填 key 就不开 LLM,避免每次失败请求
+    }
+    cfg.llm = llm;
+    cfg.save_to(&path).map_err(|e| format!("{e:#}"))?;
+    start_engine(&app);
+    // 向导完成 → 隐藏主窗口,转入托盘后台运行。
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -119,6 +176,7 @@ pub fn run() {
         ))
         .manage(ControlSlot::default())
         .manage(wizard::DownloadCancel::default())
+        .manage(EngineStarted::default())
         .invoke_handler(tauri::generate_handler![
             cancel_recording,
             settings::get_config,
@@ -131,7 +189,8 @@ pub fn run() {
             wizard::open_external,
             wizard::download_model,
             wizard::cancel_download,
-            wizard::import_model
+            wizard::import_model,
+            finish_wizard
         ])
         .setup(|app| {
             let settings = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)?;
@@ -158,19 +217,13 @@ pub fn run() {
                 apply_no_activate(&w);
             }
 
-            // 读配置并在后台线程跑引擎(把状态回调到浮窗)
-            let app_handle = app.handle().clone();
-            match Config::load_resolved() {
-                Ok(cfg) => {
-                    let enabled = cfg.overlay.enabled;
-                    let observer = Arc::new(TauriObserver { app: app_handle, enabled });
-                    std::thread::spawn(move || {
-                        if let Err(e) = voice_input::engine::run_with(cfg, observer) {
-                            eprintln!("引擎退出: {e}");
-                        }
-                    });
-                }
-                Err(e) => eprintln!("加载配置失败: {e}"),
+            // 就绪分流:就绪→启动引擎(主窗口保持隐藏到托盘);未就绪→显示主窗口跑首启向导。
+            let handle = app.handle().clone();
+            if wizard::wizard_state().ready {
+                start_engine(&handle);
+            } else if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
             }
             Ok(())
         })
