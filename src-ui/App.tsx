@@ -73,9 +73,15 @@ export default function App() {
     };
     try {
       await saveConfig(toSave);
+    } catch (e) {
+      setSaveError(`保存失败:${e}`);
+      setSaving(false);
+      return;
+    }
+    try {
       await restartApp(); // 应用即将重启,这个 Promise 不会正常返回
     } catch (e) {
-      setSaveError(String(e));
+      setSaveError(`重启失败(配置已保存,请手动重启):${e}`);
       setSaving(false);
     }
   };
@@ -121,7 +127,7 @@ export default function App() {
           <span className="text-sm text-amber-700">● 有未保存的更改</span>
           {conflict && <span className="text-xs text-red-600">热键互相冲突,无法保存</span>}
           {saveError && (
-            <span className="text-xs text-red-600 truncate">保存失败:{saveError}</span>
+            <span className="text-xs text-red-600 truncate">{saveError}</span>
           )}
           <span className="flex-1" />
           <span className="text-xs text-neutral-400">保存后 ByType 将自动重启</span>
