@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { testLlm } from "./api";
 import { MODE_OPTIONS } from "./consts";
 import type { LlmConfig, PageProps } from "./types";
@@ -20,16 +20,28 @@ export default function LlmPage({ cfg, set }: PageProps) {
   const [showKey, setShowKey] = useState(false);
   const [test, setTest] = useState<TestState>({ st: "idle" });
   const llm = cfg.llm;
-  const setLlm = (patch: Partial<LlmConfig>) =>
+
+  // 切页即卸载;测试可长达 timeout_secs 秒,卸载后不再 setTest。
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  const setLlm = (patch: Partial<LlmConfig>) => {
+    setTest({ st: "idle" }); // 表单已变,旧测试结果不再可信
     set((c) => ({ ...c, llm: { ...c.llm, ...patch } }));
+  };
 
   const runTest = async () => {
     setTest({ st: "testing" });
     try {
       const r = await testLlm(llm); // 用表单当前值,无需先保存
-      setTest({ st: "ok", ms: r.latency_ms, reply: r.reply.slice(0, 50) });
+      if (mounted.current) setTest({ st: "ok", ms: r.latency_ms, reply: r.reply.slice(0, 50) + (r.reply.length > 50 ? "…" : "") });
     } catch (e) {
-      setTest({ st: "err", msg: String(e).slice(0, 120) });
+      if (mounted.current) setTest({ st: "err", msg: String(e).slice(0, 120) });
     }
   };
 
@@ -142,7 +154,7 @@ export default function LlmPage({ cfg, set }: PageProps) {
               rows={3}
               placeholder="留空使用内置预设"
               onChange={(e) => setLlm({ [p.key]: e.target.value } as Partial<LlmConfig>)}
-              className="border border-neutral-300 rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:border-blue-500"
+              className="border border-neutral-300 rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:border-blue-500 resize-y"
             />
           </div>
         ))}
