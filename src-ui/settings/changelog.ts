@@ -7,6 +7,13 @@ export interface Release {
 /** 版本说明(新版本加在数组最前)。 */
 export const CHANGELOG: Release[] = [
   {
+    version: "1.0.1",
+    date: "2026-06-10",
+    items: [
+      "修复:浏览器全屏(F11/视频全屏)时,录音浮窗被遮挡看不见",
+    ],
+  },
+  {
     version: "1.0.0",
     date: "2026-06-10",
     items: [
