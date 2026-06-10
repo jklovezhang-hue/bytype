@@ -111,6 +111,7 @@ pub fn run() {
                 let _ = w.set_focus();
             }
         }))
+        // 开机自启:Windows 走注册表 Run 键;MacosLauncher 参数仅 macOS 生效。
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
