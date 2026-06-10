@@ -1,8 +1,11 @@
 //! 首启向导后端:就绪状态、依赖检测、模型下载/导入。
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use serde::Serialize;
+use tauri::Emitter;
 use voice_input::config::Config;
 
 #[derive(Serialize)]
@@ -168,4 +171,101 @@ fn mic_privacy_allowed() -> Option<bool> {
 #[cfg(not(windows))]
 fn mic_privacy_allowed() -> Option<bool> {
     None
+}
+
+/// 下载取消标志(由 lib.rs manage)。
+#[derive(Default)]
+pub struct DownloadCancel(pub Arc<AtomicBool>);
+
+#[derive(Clone, Serialize)]
+struct DlProgress {
+    file: String,
+    received: u64,
+    total: u64,
+}
+
+/// 下载模型(tokens + model)到向导模型目录,emit `bt:dl-progress`。
+#[tauri::command]
+pub async fn download_model(
+    app: tauri::AppHandle,
+    cancel: tauri::State<'_, DownloadCancel>,
+) -> Result<(), String> {
+    let flag = cancel.0.clone();
+    flag.store(false, Ordering::SeqCst);
+    let dir = wizard_model_dir();
+    // 无 config 时用默认配置的 URL(仍是 hf-mirror 默认)。
+    let cfg = Config::load_resolved().unwrap_or_default();
+    let (model_url, tokens_url) = (cfg.model.model_url.clone(), cfg.model.tokens_url.clone());
+
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        // 先 tokens(小、快,能早暴露 URL 错误),再 model(大),存为 model.onnx
+        dl_one(&app, &flag, &tokens_url, &dir.join("tokens.txt"), "tokens")?;
+        dl_one(&app, &flag, &model_url, &dir.join("model.onnx"), "model")?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn dl_one(
+    app: &tauri::AppHandle,
+    flag: &Arc<AtomicBool>,
+    url: &str,
+    dest: &Path,
+    file_tag: &str,
+) -> Result<(), String> {
+    let part = dest.with_extension("part");
+    let app2 = app.clone();
+    let tag = file_tag.to_string();
+    let res = voice_input::download::download_file(
+        url,
+        &part,
+        |received, total| {
+            let _ = app2.emit("bt:dl-progress", DlProgress { file: tag.clone(), received, total });
+        },
+        || flag.load(Ordering::SeqCst),
+    );
+    match res {
+        Ok(()) => {
+            // 校验大小:model ≥ 100MB,tokens ≥ 1KB
+            let min: u64 = if file_tag == "model" { 100 * 1024 * 1024 } else { 1024 };
+            let size = std::fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
+            if size < min {
+                std::fs::remove_file(&part).ok();
+                return Err(format!("{file_tag} 文件过小({size} 字节),可能下载不完整"));
+            }
+            std::fs::rename(&part, dest).map_err(|e| e.to_string())?;
+            Ok(())
+        }
+        Err(e) => {
+            std::fs::remove_file(&part).ok();
+            Err(e.to_string())
+        }
+    }
+}
+
+/// 取消进行中的下载。
+#[tauri::command]
+pub fn cancel_download(cancel: tauri::State<DownloadCancel>) {
+    cancel.0.store(true, Ordering::SeqCst);
+}
+
+/// 导入用户本地已下好的模型文件(校验后复制到模型目录)。
+#[tauri::command]
+pub fn import_model(model_path: String, tokens_path: String) -> Result<(), String> {
+    let dir = wizard_model_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let m = Path::new(&model_path);
+    let t = Path::new(&tokens_path);
+    let msize = std::fs::metadata(m).map(|x| x.len()).unwrap_or(0);
+    if msize < 100 * 1024 * 1024 {
+        return Err("所选模型文件过小,不像有效的 model.onnx".into());
+    }
+    if std::fs::metadata(t).map(|x| x.len()).unwrap_or(0) == 0 {
+        return Err("所选 tokens 文件为空或不存在".into());
+    }
+    std::fs::copy(m, dir.join("model.onnx")).map_err(|e| e.to_string())?;
+    std::fs::copy(t, dir.join("tokens.txt")).map_err(|e| e.to_string())?;
+    Ok(())
 }

@@ -118,6 +118,7 @@ pub fn run() {
             None,
         ))
         .manage(ControlSlot::default())
+        .manage(wizard::DownloadCancel::default())
         .invoke_handler(tauri::generate_handler![
             cancel_recording,
             settings::get_config,
@@ -127,7 +128,10 @@ pub fn run() {
             settings::open_config_dir,
             wizard::wizard_state,
             wizard::check_dependencies,
-            wizard::open_external
+            wizard::open_external,
+            wizard::download_model,
+            wizard::cancel_download,
+            wizard::import_model
         ])
         .setup(|app| {
             let settings = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)?;
