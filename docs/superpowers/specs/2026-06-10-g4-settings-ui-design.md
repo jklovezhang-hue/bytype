@@ -21,6 +21,8 @@
 | 测试按钮 | 用**表单当前值**(无需先保存)发一条固定测试请求,显示延迟 + 回复 / 错误 |
 | TOML 写回 | `toml` crate 整文件重写。**丢失手写注释**,值全部保留;注释参考 config.example.toml |
 | 关于页署名 | © 2026 **Yong Zhang**;联系方式 **jklover2025@outlook.com** |
+| 外观(暗黑模式) | 通用页「外观」三选:**跟随系统 / 浅色 / 深色**,**立即生效**;存 webview localStorage(`bt-theme`),不进 config.toml、不参与保存栏。Tailwind `darkMode: "class"`;浮窗药丸不随主题(保持深色半透明,录音场景不突兀) |
+| 应用图标 | **蓝色圆角药丸 + 白色波形五柱**。`examples/gen_icon.rs`(`image` dev 依赖)程序化绘制 1024×1024 源图(4× 超采样抗锯齿)并提交,经官方 `tauri icon` 生成全套(icon.ico/icon.png/各尺寸);exe、任务栏、托盘同图(托盘已用 `default_window_icon`,零代码改动) |
 
 ## 架构
 
@@ -76,7 +78,9 @@ src-ui/
 ## 页面明细
 
 1. **通用**:录音浮窗开关(`overlay.enabled`)、提示音开关(`sound.enabled`)、
-   开机自启开关(插件,旁注「立即生效」)、识别语言下拉(`asr.language`:自动/中文/英文/粤语/日语/韩语)。
+   开机自启开关(插件,旁注「立即生效」)、识别语言下拉(`asr.language`:自动/中文/英文/粤语/日语/韩语)、
+   **外观三选(跟随系统/浅色/深色,立即生效,localStorage 持久化;「跟随系统」监听
+   `prefers-color-scheme` 变化)**。
 2. **热键**:主键/翻译键/命令键三个下拉(LWin RWin LAlt RAlt LCtrl RCtrl LShift RShift,中文标签);
    任意两键相同 → 冲突项红框 + 红字提示 + 禁用保存按钮。每项带用途说明(按住说话/译成英文/改写选中文字)。
 3. **LLM 整理**:启用开关(`llm.enabled`)、接口地址、API Key(password 框 + 👁 明文切换)、模型名、
@@ -132,7 +136,10 @@ src-ui/
 - src-tauri/Cargo.toml:`tauri-plugin-autostart = "2"`;lib.rs 注册插件并挂新命令。
 - package.json:`@tauri-apps/plugin-autostart`。
 - src-tauri/capabilities/default.json:main 窗口加 `autostart:default` 权限。
-- 根 crate:无新依赖(serde derive、toml 已有)。
+- 根 crate:dev-dependencies 加 `image`(仅 gen_icon example 用)。
+- tailwind.config:`darkMode: "class"`;前端加 `settings/theme.ts`(读写 localStorage + 挂 `.dark` 根类
+  + 跟随系统监听),全部设置组件补 `dark:` 变体。
+- src-tauri/icons/*:由 `tauri icon` 重新生成(药丸波形源图一并提交)。
 - config.example.toml、窗口尺寸(900×640)不变。
 
 ## 测试策略(沿用项目惯例:纯逻辑 TDD,集成真机)
@@ -143,7 +150,9 @@ src-ui/
 - **真机端到端清单**:各项修改→保存并重启→行为变化(换热键生效、关浮窗、关提示音、改 mode);
   测试按钮真实成功 + 故意改错 key 看失败提示;自启开关 → 任务管理器「启动应用」出现/消失;
   打开配置文件夹;帮助页键名跟随表单;关于页版本/署名/邮箱/路径正确;
-  热键冲突禁存;放弃更改回滚;无 config.toml 时的黄条与保存创建。
+  热键冲突禁存;放弃更改回滚;无 config.toml 时的黄条与保存创建;
+  外观三选立即生效、重开窗口记住选择、跟随系统随系统切换;
+  新图标在 exe/任务栏/托盘/关于页正确显示。
 
 ## 非目标(后续或不做)
 
@@ -151,5 +160,6 @@ src-ui/
 - 提示音自定义路径 UI(config.toml 仍可手改)。
 - TOML 注释保留(toml_edit)——接受整文件重写。
 - 帮助搜索、在线文档、自动生成 changelog、界面多语言。
+- 浮窗药丸主题化(保持深色半透明,不随外观设置变)。
 - `asr.model_dir` 设置 UI 与模型下载 —— 属 G5 首启向导。
 - 第三方开源致谢页 —— 属 G6。
