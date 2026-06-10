@@ -7,6 +7,13 @@ export interface Release {
 /** 版本说明(新版本加在数组最前)。 */
 export const CHANGELOG: Release[] = [
   {
+    version: "1.1.0",
+    date: "2026-06-11",
+    items: [
+      "翻译热键升级为中英互译:说中文出英文,说英文等其他语言出中文,并自动纠正语法",
+    ],
+  },
+  {
     version: "1.0.1",
     date: "2026-06-10",
     items: [

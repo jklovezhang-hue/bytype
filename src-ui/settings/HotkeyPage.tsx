@@ -5,7 +5,7 @@ import { Row, Section, SelectBox } from "./widgets";
 
 const ITEMS = [
   { key: "primary", label: "主键", sub: "按住说话,松手出字" },
-  { key: "translate_modifier", label: "翻译键", sub: "主键+它:译成英文" },
+  { key: "translate_modifier", label: "翻译键", sub: "主键+它:中英互译(中→英,其他→中)" },
   { key: "command_modifier", label: "命令键", sub: "主键+它:对选中文字执行语音命令" },
 ] as const;
 
