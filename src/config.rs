@@ -17,6 +17,7 @@ pub struct Config {
     pub app_style: Vec<AppStyle>,
     pub overlay: OverlayConfig,
     pub sound: SoundConfig,
+    pub model: ModelConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -70,6 +71,7 @@ impl Default for Config {
             app_style: Vec::new(),
             overlay: OverlayConfig::default(),
             sound: SoundConfig::default(),
+            model: ModelConfig::default(),
         }
     }
 }
@@ -138,6 +140,24 @@ impl Default for SoundConfig {
             enabled: true,
             start_sound: String::new(),
             end_sound: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(default)]
+pub struct ModelConfig {
+    /// 语音识别模型(int8 onnx)下载源;下载后存为 model.onnx。
+    pub model_url: String,
+    /// tokens.txt 下载源。
+    pub tokens_url: String,
+}
+
+impl Default for ModelConfig {
+    fn default() -> Self {
+        ModelConfig {
+            model_url: "https://hf-mirror.com/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/model.int8.onnx".into(),
+            tokens_url: "https://hf-mirror.com/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/tokens.txt".into(),
         }
     }
 }
@@ -552,5 +572,21 @@ style = "技术"
         let back = Config::load(&path.to_string_lossy()).unwrap();
         assert_eq!(back, cfg);
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn model_section_defaults_and_override() {
+        // 默认:URL 指向 hf-mirror
+        let cfg: Config = toml::from_str("").unwrap();
+        assert!(cfg.model.model_url.contains("hf-mirror.com"));
+        assert!(cfg.model.tokens_url.contains("tokens.txt"));
+        // 覆盖
+        let cfg: Config =
+            toml::from_str("[model]\nmodel_url = \"https://x/m.onnx\"\n").unwrap();
+        assert_eq!(cfg.model.model_url, "https://x/m.onnx");
+        // 往返
+        let text = toml::to_string_pretty(&cfg).unwrap();
+        let back: Config = toml::from_str(&text).unwrap();
+        assert_eq!(back, cfg);
     }
 }

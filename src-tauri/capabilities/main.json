@@ -4,6 +4,7 @@
   "description": "ByType 主窗口专属能力(设置界面)",
   "windows": ["main"],
   "permissions": [
-    "autostart:default"
+    "autostart:default",
+    "dialog:default"
   ]
 }
