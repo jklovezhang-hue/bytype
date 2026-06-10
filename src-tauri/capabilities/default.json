@@ -4,6 +4,7 @@
   "description": "ByType 主窗口与浮窗的基础能力",
   "windows": ["main", "overlay"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "autostart:default"
   ]
 }

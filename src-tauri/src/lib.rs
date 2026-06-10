@@ -111,6 +111,10 @@ pub fn run() {
                 let _ = w.set_focus();
             }
         }))
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .manage(ControlSlot::default())
         .invoke_handler(tauri::generate_handler![
             cancel_recording,
