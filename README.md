@@ -3,6 +3,8 @@
 按住热键说话,松手即把文字注入当前应用的 Windows 语音输入工具(Typeless 风格)。
 本地 SenseVoice 识别 + LLM 整理,中英文皆可。
 
+![ByType 宣传海报:Speak. Type. Translate.](docs/poster.png)
+
 ![ByType 演示:中文听写、英语语法纠正、翻译、语音命令、取消](docs/demo.gif)
 
 ## 功能
