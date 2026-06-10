@@ -66,6 +66,7 @@ impl EngineObserver for TauriObserver {
             if let Some(w) = self.app.get_webview_window("overlay") {
                 position_bottom_center(&w);
                 let _ = w.show();
+                raise_topmost(&w);
             }
         }
         let _ = self.app.emit_to("overlay", "bt:state", tag);
@@ -107,6 +108,35 @@ fn apply_no_activate(w: &WebviewWindow) {
 
 #[cfg(not(windows))]
 fn apply_no_activate(_w: &WebviewWindow) {}
+
+/// 每次显示浮窗时,把它重新插到「置顶波段」最顶 —— 不然全屏浏览器(F11/视频全屏)
+/// 后于浮窗声明置顶,会按「最后置顶者胜」压在浮窗上面,导致录音药丸被全屏窗口盖住看不见。
+/// HWND_TOPMOST 重新断言置顶;SWP_NOACTIVATE 保证不抢焦点(否则粘贴会落到浮窗而非目标应用)。
+/// 仅对无边框窗口化全屏(浏览器全部用这种)有效;真正的独占全屏(多为游戏)无法被任何普通窗口覆盖。
+#[cfg(windows)]
+fn raise_topmost(w: &WebviewWindow) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SetWindowPos, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+    };
+    if let Ok(h) = w.hwnd() {
+        let hwnd = HWND(h.0);
+        unsafe {
+            let _ = SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            );
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn raise_topmost(_w: &WebviewWindow) {}
 
 /// 启动听写引擎(只启动一次)。就绪 setup 与向导完成都经此入口。
 fn start_engine(app: &tauri::AppHandle) {
