@@ -184,18 +184,20 @@ struct DlProgress {
     total: u64,
 }
 
-/// 下载模型(tokens + model)到向导模型目录,emit `bt:dl-progress`。
+/// 下载模型(tokens + model)到向导模型目录,emit `bt:dl-progress`。URL 由前端传入(向导可改源)。
 #[tauri::command]
 pub async fn download_model(
     app: tauri::AppHandle,
     cancel: tauri::State<'_, DownloadCancel>,
+    model_url: String,
+    tokens_url: String,
 ) -> Result<(), String> {
+    if model_url.trim().is_empty() || tokens_url.trim().is_empty() {
+        return Err("下载地址不能为空".into());
+    }
     let flag = cancel.0.clone();
     flag.store(false, Ordering::SeqCst);
     let dir = wizard_model_dir();
-    // 无 config 时用默认配置的 URL(仍是 hf-mirror 默认)。
-    let cfg = Config::load_resolved().unwrap_or_default();
-    let (model_url, tokens_url) = (cfg.model.model_url.clone(), cfg.model.tokens_url.clone());
 
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;

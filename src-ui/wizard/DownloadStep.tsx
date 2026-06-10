@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { cancelDownload, downloadModel, importModel, onDlProgress } from "./api";
+import { getConfig } from "../settings/api";
 import type { DlProgress } from "./types";
 
 export default function DownloadStep({
@@ -13,6 +14,8 @@ export default function DownloadStep({
   const [phase, setPhase] = useState<"idle" | "downloading">("idle");
   const [prog, setProg] = useState<DlProgress | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [modelUrl, setModelUrl] = useState("");
+  const [tokensUrl, setTokensUrl] = useState("");
   const unlisten = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -20,12 +23,26 @@ export default function DownloadStep({
     return () => unlisten.current?.();
   }, []);
 
+  useEffect(() => {
+    // 预填下载源(config 不存在时后端返回内置 hf-mirror 默认)。
+    getConfig()
+      .then((r) => {
+        setModelUrl(r.config.model.model_url);
+        setTokensUrl(r.config.model.tokens_url);
+      })
+      .catch(() => {});
+  }, []);
+
   const start = async () => {
+    if (!modelUrl.trim() || !tokensUrl.trim()) {
+      setErr("下载地址不能为空");
+      return;
+    }
     setErr(null);
     setPhase("downloading");
     setProg(null);
     try {
-      await downloadModel();
+      await downloadModel(modelUrl, tokensUrl);
       onReady();
     } catch (e) {
       const msg = String(e);
@@ -52,6 +69,9 @@ export default function DownloadStep({
 
   const pct = prog && prog.total > 0 ? Math.round((prog.received / prog.total) * 100) : 0;
   const mb = (n: number) => (n / 1024 / 1024).toFixed(1);
+  const inputCls =
+    "border border-neutral-300 dark:border-neutral-700 dark:bg-neutral-800 rounded-md px-2 py-1 text-xs w-full disabled:opacity-50";
+  const downloading = phase === "downloading";
 
   return (
     <div className="flex flex-col gap-3">
@@ -60,8 +80,30 @@ export default function DownloadStep({
         <p className="text-sm text-emerald-600">✓ 模型已就绪,点「下一步」继续。</p>
       ) : (
         <>
-          <p className="text-xs text-neutral-400">SenseVoice int8 · 约 228MB · 源:hf-mirror.com(可在设置改)</p>
-          {phase === "downloading" && (
+          <p className="text-xs text-neutral-400">
+            SenseVoice int8 · 约 228MB · 默认源 hf-mirror.com(下不动可改下方地址重试,或用本地导入)
+          </p>
+          <label className="text-xs text-neutral-500 flex flex-col gap-1">
+            模型地址
+            <input
+              className={inputCls}
+              value={modelUrl}
+              disabled={downloading}
+              placeholder="https://.../model.int8.onnx"
+              onChange={(e) => setModelUrl(e.target.value)}
+            />
+          </label>
+          <label className="text-xs text-neutral-500 flex flex-col gap-1">
+            词表地址
+            <input
+              className={inputCls}
+              value={tokensUrl}
+              disabled={downloading}
+              placeholder="https://.../tokens.txt"
+              onChange={(e) => setTokensUrl(e.target.value)}
+            />
+          </label>
+          {downloading && (
             <>
               <div className="h-2 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
                 <div className="h-full bg-blue-500" style={{ width: `${pct}%` }} />
@@ -77,7 +119,7 @@ export default function DownloadStep({
               </div>
             </>
           )}
-          {phase === "idle" && (
+          {!downloading && (
             <button
               onClick={start}
               className="self-start px-3.5 py-1.5 rounded-md text-sm text-white bg-blue-500 hover:bg-blue-600"

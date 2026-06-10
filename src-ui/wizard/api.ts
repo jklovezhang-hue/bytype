@@ -5,7 +5,8 @@ import type { LlmConfig } from "../settings/types";
 
 export const wizardState = () => invoke<WizardState>("wizard_state");
 export const checkDependencies = () => invoke<DepCheck[]>("check_dependencies");
-export const downloadModel = () => invoke<void>("download_model");
+export const downloadModel = (modelUrl: string, tokensUrl: string) =>
+  invoke<void>("download_model", { modelUrl, tokensUrl });
 export const cancelDownload = () => invoke<void>("cancel_download");
 // Tauri 2 命令参数:JS 端用 camelCase,自动映射到 Rust 的 snake_case(model_path/tokens_path)。
 export const importModel = (modelPath: string, tokensPath: string) =>

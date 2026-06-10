@@ -46,6 +46,11 @@ export interface SoundConfig {
   end_sound: string;
 }
 
+export interface ModelConfig {
+  model_url: string;
+  tokens_url: string;
+}
+
 export interface Config {
   hotkey: HotkeyConfig;
   asr: AsrConfig;
@@ -54,6 +59,7 @@ export interface Config {
   app_style: AppStyle[];
   overlay: OverlayConfig;
   sound: SoundConfig;
+  model: ModelConfig;
 }
 
 export interface GetConfigResp {
