@@ -26,6 +26,8 @@ pub struct AsrConfig {
     pub language: String,
 }
 
+// PartialEq 仅用于测试断言;temperature 为 f32,NaN 不会出现(值只来自 TOML 解析或默认 0.0)。
+// 设置 UI 的脏检查在前端用 JSON 快照对比,不依赖此处。
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(default)]
 pub struct LlmConfig {
@@ -271,6 +273,7 @@ impl Config {
 
     /// 原样加载(路径字段不做相对→绝对解析),返回配置与 config.toml 路径。
     /// 设置界面用它,保证 "./models/sensevoice" 这类相对路径原样写回。
+    /// (find_config_file 的第二个返回值是所在目录,这里不解析路径故不需要。)
     pub fn load_raw() -> anyhow::Result<(Config, PathBuf)> {
         let (path, _base) = find_config_file()?;
         let cfg = Config::load(&path.to_string_lossy())?;
@@ -542,7 +545,7 @@ style = "技术"
         let mut cfg = Config::default();
         cfg.llm.model = "deepseek-v4-flash".into();
         cfg.llm.vocabulary = vec!["OneDrive".into()];
-        let dir = std::env::temp_dir().join("bytype-g4-save-test");
+        let dir = std::env::temp_dir().join(format!("bytype-g4-save-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.toml");
         cfg.save_to(&path).unwrap();
