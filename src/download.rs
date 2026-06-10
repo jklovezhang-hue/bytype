@@ -14,8 +14,11 @@ pub fn download_file(
     mut on_progress: impl FnMut(u64, u64),
     should_cancel: impl Fn() -> bool,
 ) -> Result<()> {
-    // 大文件:不设总超时(只在建连阶段用默认行为)。
-    let client = reqwest::blocking::Client::builder().build()?;
+    // timeout:总请求超时上限,防网络挂起时 read() 永久阻塞(取消标志靠循环轮询)。
+    // reqwest 0.12 blocking::ClientBuilder 无 read_timeout,改用 timeout(1800s 够下完 228MB)。
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(1800))
+        .build()?;
     let mut resp = client
         .get(url)
         .send()

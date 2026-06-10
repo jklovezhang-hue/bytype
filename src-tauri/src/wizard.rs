@@ -218,11 +218,16 @@ fn dl_one(
     let part = dest.with_extension("part");
     let app2 = app.clone();
     let tag = file_tag.to_string();
+    let mut last_emitted: u64 = 0;
+    const THROTTLE_BYTES: u64 = 1024 * 1024; // 距上次 ≥1MB 才 emit,末帧必发
     let res = voice_input::download::download_file(
         url,
         &part,
         |received, total| {
-            let _ = app2.emit("bt:dl-progress", DlProgress { file: tag.clone(), received, total });
+            if received.saturating_sub(last_emitted) >= THROTTLE_BYTES || (total > 0 && received == total) {
+                last_emitted = received;
+                let _ = app2.emit("bt:dl-progress", DlProgress { file: tag.clone(), received, total });
+            }
         },
         || flag.load(Ordering::SeqCst),
     );
@@ -262,8 +267,8 @@ pub fn import_model(model_path: String, tokens_path: String) -> Result<(), Strin
     if msize < 100 * 1024 * 1024 {
         return Err("所选模型文件过小,不像有效的 model.onnx".into());
     }
-    if std::fs::metadata(t).map(|x| x.len()).unwrap_or(0) == 0 {
-        return Err("所选 tokens 文件为空或不存在".into());
+    if std::fs::metadata(t).map(|x| x.len()).unwrap_or(0) < 1024 {
+        return Err("所选 tokens 文件过小或不存在".into());
     }
     std::fs::copy(m, dir.join("model.onnx")).map_err(|e| e.to_string())?;
     std::fs::copy(t, dir.join("tokens.txt")).map_err(|e| e.to_string())?;
