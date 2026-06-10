@@ -35,36 +35,36 @@ export default function AboutPage({ cfgPath }: { cfgPath: string | null }) {
       <div className="flex items-center gap-4">
         <img src={iconUrl} alt="ByType" className="w-14 h-14 rounded-xl" />
         <div>
-          <div className="text-lg font-semibold text-neutral-900">
+          <div className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
             ByType <span className="text-sm font-normal text-neutral-400 ml-1">v{version}</span>
           </div>
-          <div className="text-sm text-neutral-500">按住热键说话,松手即出字 —— 本地识别 + LLM 整理。</div>
+          <div className="text-sm text-neutral-500 dark:text-neutral-400">按住热键说话,松手即出字 —— 本地识别 + LLM 整理。</div>
         </div>
       </div>
       <Section title="作者与联系">
-        <p className="text-sm text-neutral-700">© 2026 Yong Zhang</p>
-        <p className="text-sm text-neutral-700 flex items-center gap-2">
-          <a className="text-blue-600 hover:underline" href={`mailto:${EMAIL}`}>
+        <p className="text-sm text-neutral-700 dark:text-neutral-300">© 2026 Yong Zhang</p>
+        <p className="text-sm text-neutral-700 dark:text-neutral-300 flex items-center gap-2">
+          <a className="text-blue-600 dark:text-blue-400 hover:underline" href={`mailto:${EMAIL}`}>
             {EMAIL}
           </a>
           <button
             type="button"
             onClick={copyEmail}
-            className="text-xs px-2 py-0.5 rounded border border-neutral-300 text-neutral-500 hover:bg-neutral-50"
+            className="text-xs px-2 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800"
           >
             {copied ? "已复制 ✓" : "复制"}
           </button>
         </p>
       </Section>
       <Section title="配置文件">
-        <p className="text-xs text-neutral-500 break-all">
+        <p className="text-xs text-neutral-500 dark:text-neutral-400 break-all">
           {cfgPath ?? "未找到,保存后将创建于程序目录"}
         </p>
         <div>
           <button
             type="button"
             onClick={() => openConfigDir()}
-            className="px-3 py-1.5 rounded-md border border-neutral-300 text-sm text-neutral-600 bg-white hover:bg-neutral-50"
+            className="px-3 py-1.5 rounded-md border border-neutral-300 dark:border-neutral-700 text-sm text-neutral-600 dark:text-neutral-300 bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700"
           >
             打开所在文件夹
           </button>

@@ -47,7 +47,7 @@ export default function App() {
 
   if (cfg === null) {
     return (
-      <div className="h-screen flex items-center justify-center text-neutral-400 text-sm">
+      <div className="h-screen flex items-center justify-center text-neutral-400 text-sm bg-white dark:bg-neutral-900">
         加载配置…
       </div>
     );
@@ -87,15 +87,15 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-white text-neutral-800">
+    <div className="h-screen flex flex-col bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200">
       <div className="flex-1 flex min-h-0">
-        <nav className="w-44 flex-none bg-neutral-50 border-r border-neutral-200 p-2.5 flex flex-col gap-1">
+        <nav className="w-44 flex-none bg-neutral-50 dark:bg-neutral-950 border-r border-neutral-200 dark:border-neutral-700 p-2.5 flex flex-col gap-1">
           {PAGES.map((p) => (
             <button
               key={p.id}
               onClick={() => setPage(p.id)}
               className={`text-left px-3 py-2 rounded-md text-sm ${
-                page === p.id ? "bg-blue-500 text-white" : "text-neutral-600 hover:bg-neutral-100"
+                page === p.id ? "bg-blue-500 text-white" : "text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
               }`}
             >
               {p.icon} {p.label}
@@ -104,12 +104,12 @@ export default function App() {
         </nav>
         <main className="flex-1 min-w-0 overflow-y-auto px-6 py-5">
           {loadError && (
-            <div className="mb-4 text-xs rounded-md border border-amber-300 bg-amber-50 text-amber-800 px-3 py-2">
+            <div className="mb-4 text-xs rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 px-3 py-2">
               config.toml 解析失败:{loadError} —— 以下显示默认值,保存将整文件覆盖。
             </div>
           )}
           {!loadError && cfgPath === null && (
-            <div className="mb-4 text-xs rounded-md border border-amber-300 bg-amber-50 text-amber-800 px-3 py-2">
+            <div className="mb-4 text-xs rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 px-3 py-2">
               未找到 config.toml,保存时将在程序目录创建。
             </div>
           )}
@@ -123,18 +123,18 @@ export default function App() {
         </main>
       </div>
       {dirty && (
-        <div className="flex-none border-t border-neutral-200 bg-amber-50 px-4 py-2.5 flex items-center gap-3">
-          <span className="text-sm text-amber-700">● 有未保存的更改</span>
-          {conflict && <span className="text-xs text-red-600">热键互相冲突,无法保存</span>}
+        <div className="flex-none border-t border-neutral-200 dark:border-neutral-700 bg-amber-50 dark:bg-neutral-800 px-4 py-2.5 flex items-center gap-3">
+          <span className="text-sm text-amber-700 dark:text-amber-400">● 有未保存的更改</span>
+          {conflict && <span className="text-xs text-red-600 dark:text-red-400">热键互相冲突,无法保存</span>}
           {saveError && (
-            <span className="text-xs text-red-600 truncate">{saveError}</span>
+            <span className="text-xs text-red-600 dark:text-red-400 truncate">{saveError}</span>
           )}
           <span className="flex-1" />
           <span className="text-xs text-neutral-400">保存后 ByType 将自动重启</span>
           <button
             onClick={onDiscard}
             disabled={saving}
-            className="px-3.5 py-1.5 rounded-md border border-neutral-300 text-sm text-neutral-600 bg-white hover:bg-neutral-50"
+            className="px-3.5 py-1.5 rounded-md border border-neutral-300 dark:border-neutral-700 text-sm text-neutral-600 dark:text-neutral-300 bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700"
           >
             放弃更改
           </button>

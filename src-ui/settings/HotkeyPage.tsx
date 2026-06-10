@@ -24,7 +24,7 @@ export default function HotkeyPage({ cfg, set }: PageProps) {
           </div>
         </Row>
       ))}
-      {conflict && <p className="text-xs text-red-600">三个热键必须互不相同。</p>}
+      {conflict && <p className="text-xs text-red-600 dark:text-red-400">三个热键必须互不相同。</p>}
       <p className="text-xs text-neutral-400">
         修饰键要在主键按住期间一起按下;录音中按 Esc 或点浮窗药丸可取消。
       </p>

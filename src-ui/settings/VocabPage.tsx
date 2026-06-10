@@ -27,10 +27,10 @@ export default function VocabPage({ cfg, set }: PageProps) {
         {words.map((w, i) => (
           <span
             key={`${w}-${i}`}
-            className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-sm px-3 py-1"
+            className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-sm px-3 py-1"
           >
             {w}
-            <button type="button" className="text-blue-400 hover:text-blue-700" onClick={() => remove(i)}>
+            <button type="button" className="text-blue-400 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-200" onClick={() => remove(i)}>
               ×
             </button>
           </span>

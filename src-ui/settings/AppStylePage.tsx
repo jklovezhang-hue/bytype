@@ -37,7 +37,7 @@ export default function AppStylePage({ cfg, set }: PageProps) {
           />
           <button
             type="button"
-            className="flex-none text-red-400 hover:text-red-600"
+            className="flex-none text-red-400 hover:text-red-600 dark:hover:text-red-400"
             title="删除"
             onClick={() => remove(i)}
           >
@@ -49,7 +49,7 @@ export default function AppStylePage({ cfg, set }: PageProps) {
         <button
           type="button"
           onClick={addRow}
-          className="px-3 py-1.5 rounded-md border border-neutral-300 text-sm text-neutral-600 bg-white hover:bg-neutral-50"
+          className="px-3 py-1.5 rounded-md border border-neutral-300 dark:border-neutral-700 text-sm text-neutral-600 dark:text-neutral-300 bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700"
         >
           + 添加规则
         </button>

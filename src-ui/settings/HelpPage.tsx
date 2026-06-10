@@ -30,7 +30,7 @@ export default function HelpPage({ cfg }: { cfg: Config }) {
   return (
     <div className="flex flex-col gap-6">
       <Section title="使用说明">
-        <ul className="text-sm text-neutral-700 flex flex-col gap-1.5 list-disc pl-5">
+        <ul className="text-sm text-neutral-700 dark:text-neutral-300 flex flex-col gap-1.5 list-disc pl-5">
           <li>
             按住 <b>{p}</b> 说话,松手自动识别、整理并输入到当前光标处。
           </li>
@@ -49,19 +49,19 @@ export default function HelpPage({ cfg }: { cfg: Config }) {
       <Section title="常见问题">
         {FAQS.map(([q, a]) => (
           <details key={q} className="text-sm">
-            <summary className="cursor-pointer text-neutral-800">{q}</summary>
-            <p className="mt-1.5 text-neutral-500 pl-4">{a}</p>
+            <summary className="cursor-pointer text-neutral-800 dark:text-neutral-200">{q}</summary>
+            <p className="mt-1.5 text-neutral-500 dark:text-neutral-400 pl-4">{a}</p>
           </details>
         ))}
       </Section>
       <Section title="版本说明">
         {CHANGELOG.map((r) => (
           <div key={r.version} className="text-sm">
-            <div className="font-medium text-neutral-800">
+            <div className="font-medium text-neutral-800 dark:text-neutral-200">
               v{r.version}
               <span className="text-xs text-neutral-400 ml-2">{r.date}</span>
             </div>
-            <ul className="mt-1 list-disc pl-5 text-neutral-600">
+            <ul className="mt-1 list-disc pl-5 text-neutral-600 dark:text-neutral-300">
               {r.items.map((it) => (
                 <li key={it}>{it}</li>
               ))}

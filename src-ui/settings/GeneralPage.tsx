@@ -3,12 +3,14 @@ import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { LANG_OPTIONS } from "./consts";
 import type { PageProps } from "./types";
 import { Row, Section, SelectBox, Toggle } from "./widgets";
+import { getTheme, setTheme, THEME_OPTIONS, type Theme } from "./theme";
 
 export default function GeneralPage({ cfg, set }: PageProps) {
   // 开机自启走 autostart 插件(注册表),立即生效,不进 config.toml、不参与脏检查。
   const [autoStart, setAutoStart] = useState(false);
   const [autoErr, setAutoErr] = useState<string | null>(null);
   const [autoBusy, setAutoBusy] = useState(false);
+  const [theme, setThemeState] = useState<Theme>(getTheme());
 
   useEffect(() => {
     let alive = true;
@@ -55,7 +57,17 @@ export default function GeneralPage({ cfg, set }: PageProps) {
       <Row label="开机自启" sub="登录 Windows 后自动在后台运行(立即生效,无需保存)">
         <Toggle checked={autoStart} onChange={toggleAutostart} />
       </Row>
-      {autoErr && <p className="text-xs text-red-600 -mt-1">{autoErr}</p>}
+      {autoErr && <p className="text-xs text-red-600 dark:text-red-400 -mt-1">{autoErr}</p>}
+      <Row label="外观" sub="界面配色,立即生效,无需保存">
+        <SelectBox
+          value={theme}
+          onChange={(v) => {
+            setTheme(v as Theme);
+            setThemeState(v as Theme);
+          }}
+          options={THEME_OPTIONS}
+        />
+      </Row>
       <Row label="识别语言" sub="SenseVoice 识别语种">
         <SelectBox
           value={cfg.asr.language}

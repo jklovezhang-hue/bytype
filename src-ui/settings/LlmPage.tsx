@@ -68,7 +68,7 @@ export default function LlmPage({ cfg, set }: PageProps) {
           />
           <button
             type="button"
-            className="text-neutral-400 hover:text-neutral-600"
+            className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
             title={showKey ? "隐藏" : "显示"}
             onClick={() => setShowKey(!showKey)}
           >
@@ -86,7 +86,7 @@ export default function LlmPage({ cfg, set }: PageProps) {
         </div>
       </Row>
       <Row label="整理力度" sub="忠实清理=只去口语词;智能整理=理顺+取自我更正;要点提炼=压缩成要点">
-        <div className="flex border border-neutral-300 rounded-md overflow-hidden">
+        <div className="flex border border-neutral-300 dark:border-neutral-700 rounded-md overflow-hidden">
           {MODE_OPTIONS.map((m) => (
             <button
               key={m.value}
@@ -95,7 +95,7 @@ export default function LlmPage({ cfg, set }: PageProps) {
               className={`px-3 py-1.5 text-sm ${
                 llm.mode === m.value
                   ? "bg-blue-500 text-white"
-                  : "bg-white text-neutral-600 hover:bg-neutral-50"
+                  : "bg-white dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-700"
               }`}
             >
               {m.label}
@@ -109,16 +109,16 @@ export default function LlmPage({ cfg, set }: PageProps) {
           type="button"
           onClick={runTest}
           disabled={test.st === "testing"}
-          className="px-3.5 py-1.5 rounded-md border border-neutral-300 text-sm text-neutral-700 bg-white hover:bg-neutral-50 disabled:opacity-50"
+          className="px-3.5 py-1.5 rounded-md border border-neutral-300 dark:border-neutral-700 text-sm text-neutral-700 dark:text-neutral-300 bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-700 disabled:opacity-50"
         >
           ⚡ {test.st === "testing" ? "测试中…" : "测试连接"}
         </button>
         {test.st === "ok" && (
-          <span className="text-xs text-emerald-600">
+          <span className="text-xs text-emerald-600 dark:text-emerald-400">
             ✓ 连接正常 · {test.ms}ms · 回复:「{test.reply}」
           </span>
         )}
-        {test.st === "err" && <span className="text-xs text-red-600">✗ {test.msg}</span>}
+        {test.st === "err" && <span className="text-xs text-red-600 dark:text-red-400">✗ {test.msg}</span>}
         <span className="text-xs text-neutral-400">用当前表单值测试,无需先保存</span>
       </div>
 
@@ -148,13 +148,13 @@ export default function LlmPage({ cfg, set }: PageProps) {
         </Row>
         {PROMPTS.map((p) => (
           <div key={p.key} className="flex flex-col gap-1">
-            <div className="text-sm text-neutral-800">{p.label}</div>
+            <div className="text-sm text-neutral-800 dark:text-neutral-200">{p.label}</div>
             <textarea
               value={llm[p.key]}
               rows={3}
               placeholder="留空使用内置预设"
               onChange={(e) => setLlm({ [p.key]: e.target.value } as Partial<LlmConfig>)}
-              className="border border-neutral-300 rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:border-blue-500 resize-y"
+              className="border border-neutral-300 dark:border-neutral-700 rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:border-blue-500 resize-y dark:bg-neutral-800 dark:text-neutral-200"
             />
           </div>
         ))}
