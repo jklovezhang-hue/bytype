@@ -15,6 +15,7 @@ pub struct GetConfigResp {
 }
 
 /// 读取**原始**配置(路径字段不解析,保证相对路径原样往返)。
+/// (不直接用 Config::load_raw:解析失败时它丢失文件路径,而 UI 黄条需要"路径+错误"同时返回。)
 #[tauri::command]
 pub fn get_config() -> GetConfigResp {
     match find_config_file() {
@@ -34,6 +35,8 @@ pub fn get_config() -> GetConfigResp {
 }
 
 /// 整文件写回 config.toml;找不到原文件时写到程序目录。
+/// (与 get_config 各自独立查找路径:设置窗口打开期间用户手动移走 config.toml 时,
+/// 保存会回落到程序目录新建——内容不丢,属已知可接受行为。)
 #[tauri::command]
 pub fn save_config(config: Config) -> Result<(), String> {
     let path = match find_config_file() {
