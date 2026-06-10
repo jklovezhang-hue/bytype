@@ -40,6 +40,6 @@ pub fn download_file(
         received += n as u64;
         on_progress(received, total);
     }
-    file.flush().ok();
+    file.flush().context("刷新文件失败")?;
     Ok(())
 }
