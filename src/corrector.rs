@@ -96,6 +96,9 @@ impl Corrector {
 /// 供设置界面"测试连接"按钮用:**不受** `enabled` 与 `skip_if_shorter_than` 影响,
 /// temperature 固定 0;失败时原样返回错误(由调用方展示)。
 pub fn test_connection(cfg: &LlmConfig) -> anyhow::Result<(u64, String)> {
+    if cfg.base_url.trim().is_empty() {
+        anyhow::bail!("接口地址不能为空");
+    }
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(cfg.timeout_secs.max(1)))
         .build()?;
