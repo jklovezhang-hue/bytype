@@ -3,9 +3,9 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(default)]
 pub struct Config {
     /// 触发热键配置。
@@ -19,14 +19,16 @@ pub struct Config {
     pub sound: SoundConfig,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(default)]
 pub struct AsrConfig {
     pub model_dir: String,
     pub language: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+// PartialEq 仅用于测试断言;temperature 为 f32,NaN 不会出现(值只来自 TOML 解析或默认 0.0)。
+// 设置 UI 的脏检查在前端用 JSON 快照对比,不依赖此处。
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(default)]
 pub struct LlmConfig {
     /// 是否启用 LLM 纠错;false 时直接用原始识别文本。
@@ -51,7 +53,7 @@ pub struct LlmConfig {
     pub command_prompt: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(default)]
 pub struct InjectConfig {
     /// 注入方式:目前实现 "paste";"type" 为预留。
@@ -106,7 +108,7 @@ impl Default for InjectConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(default)]
 pub struct OverlayConfig {
     /// 是否显示录音浮窗。false 则完全不弹(引擎逻辑不受影响)。
@@ -119,7 +121,7 @@ impl Default for OverlayConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(default)]
 pub struct SoundConfig {
     /// 是否播放录音开始/结束提示音。
@@ -140,7 +142,7 @@ impl Default for SoundConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(default)]
 pub struct HotkeyConfig {
     pub primary: String,
@@ -158,7 +160,7 @@ impl Default for HotkeyConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Default)]
 pub struct AppStyle {
     /// 前台进程名包含此串(不区分大小写)即命中。
     #[serde(rename = "match")]
@@ -269,11 +271,28 @@ impl Config {
         Ok(cfg)
     }
 
-    /// 不依赖工作目录地加载:按 CWD → 程序目录 → 逐级父目录 查找 config.toml,
-    /// 并把相对的 `asr.model_dir` 解析到 config 所在目录,得到绝对路径。
+    /// 原样加载(路径字段不做相对→绝对解析),返回配置与 config.toml 路径。
+    /// 设置界面用它,保证 "./models/sensevoice" 这类相对路径原样写回。
+    /// (find_config_file 的第二个返回值是所在目录,这里不解析路径故不需要。)
+    pub fn load_raw() -> anyhow::Result<(Config, PathBuf)> {
+        let (path, _base) = find_config_file()?;
+        let cfg = Config::load(&path.to_string_lossy())?;
+        Ok((cfg, path))
+    }
+
+    /// 序列化为 TOML 并整文件写回(手写注释会丢失,字段值全部保留)。
+    pub fn save_to(&self, path: &Path) -> anyhow::Result<()> {
+        let text = toml::to_string_pretty(self).context("序列化配置失败")?;
+        std::fs::write(path, text)
+            .with_context(|| format!("写入配置文件失败: {}", path.display()))?;
+        Ok(())
+    }
+
+    /// 不依赖工作目录地加载:查找 config.toml,并把相对的 `asr.model_dir`
+    /// 与提示音路径解析到 config 所在目录,得到绝对路径。
     pub fn load_resolved() -> anyhow::Result<Config> {
-        let (path, base) = find_config_file()?;
-        let mut cfg = Config::load(&path.to_string_lossy())?;
+        let (mut cfg, path) = Config::load_raw()?;
+        let base = path.parent().unwrap_or(Path::new(".")).to_path_buf();
         cfg.asr.model_dir = resolve_model_dir(&base, &cfg.asr.model_dir);
         cfg.sound.start_sound = resolve_sound_path(&base, &cfg.sound.start_sound);
         cfg.sound.end_sound = resolve_sound_path(&base, &cfg.sound.end_sound);
@@ -302,7 +321,7 @@ pub fn resolve_sound_path(base: &Path, p: &str) -> String {
 
 /// 查找 config.toml,返回 (文件路径, 所在目录)。
 /// 顺序:当前工作目录 → 可执行文件目录 → 其各级父目录。
-fn find_config_file() -> anyhow::Result<(PathBuf, PathBuf)> {
+pub fn find_config_file() -> anyhow::Result<(PathBuf, PathBuf)> {
     if let Ok(cwd) = std::env::current_dir() {
         let c = cwd.join("config.toml");
         if c.is_file() {
@@ -501,5 +520,37 @@ style = "技术"
         assert!(r.contains("base"));
         // 绝对路径原样返回
         assert_eq!(resolve_sound_path(base, "C:\\x\\a.wav"), "C:\\x\\a.wav");
+    }
+
+    #[test]
+    fn serialize_roundtrip_preserves_values() {
+        let mut cfg = Config::default();
+        cfg.hotkey.primary = "RWin".into();
+        cfg.asr.model_dir = "./models/sensevoice".into();
+        cfg.llm.api_key = "sk-test".into();
+        cfg.llm.vocabulary = vec!["Kubernetes".into(), "ByType".into()];
+        cfg.app_style = vec![AppStyle { match_: "outlook".into(), style: "正式".into() }];
+        cfg.sound.enabled = false;
+        let text = toml::to_string_pretty(&cfg).unwrap();
+        // rename 生效:写出的是 match 而不是 match_
+        assert!(text.contains("match = \"outlook\""), "got: {text}");
+        // 相对路径原样保留
+        assert!(text.contains("./models/sensevoice"));
+        let back: Config = toml::from_str(&text).unwrap();
+        assert_eq!(back, cfg);
+    }
+
+    #[test]
+    fn save_to_then_load_roundtrips() {
+        let mut cfg = Config::default();
+        cfg.llm.model = "deepseek-v4-flash".into();
+        cfg.llm.vocabulary = vec!["OneDrive".into()];
+        let dir = std::env::temp_dir().join(format!("bytype-g4-save-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        cfg.save_to(&path).unwrap();
+        let back = Config::load(&path.to_string_lossy()).unwrap();
+        assert_eq!(back, cfg);
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

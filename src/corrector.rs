@@ -92,6 +92,38 @@ impl Corrector {
     }
 }
 
+/// 连通性测试:用给定 [llm] 配置发一条固定请求,返回(耗时 ms, 回复文本)。
+/// 供设置界面"测试连接"按钮用:**不受** `enabled` 与 `skip_if_shorter_than` 影响,
+/// temperature 固定 0;失败时原样返回错误(由调用方展示)。
+pub fn test_connection(cfg: &LlmConfig) -> anyhow::Result<(u64, String)> {
+    if cfg.base_url.trim().is_empty() {
+        anyhow::bail!("接口地址不能为空");
+    }
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(cfg.timeout_secs.max(1)))
+        .build()?;
+    let url = format!("{}/chat/completions", cfg.base_url.trim_end_matches('/'));
+    let body = json!({
+        "model": cfg.model,
+        "temperature": 0.0,
+        "messages": [
+            { "role": "system", "content": "你是连接测试助手,请只回复:你好,ByType!" },
+            { "role": "user", "content": "ping" },
+        ],
+    });
+    let start = std::time::Instant::now();
+    let resp = client
+        .post(&url)
+        .bearer_auth(&cfg.api_key)
+        .json(&body)
+        .send()?
+        .error_for_status()?;
+    let value: Value = resp.json()?;
+    let reply = parse_response(&value)
+        .ok_or_else(|| anyhow::anyhow!("响应缺少 choices[0].message.content"))?;
+    Ok((start.elapsed().as_millis() as u64, reply))
+}
+
 /// 把词库行、应用风格依次拼到基础系统提示词后面(空项跳过)。
 pub fn compose_system_prompt(
     base: &str,

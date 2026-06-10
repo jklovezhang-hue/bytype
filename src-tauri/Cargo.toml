@@ -13,8 +13,10 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-single-instance = "2"
+tauri-plugin-autostart = "2"
 voice_input = { package = "voice-input", path = ".." }
 anyhow = "1"
+serde = { version = "1", features = ["derive"] }
 
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.58"

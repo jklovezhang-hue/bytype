@@ -40,3 +40,4 @@ features = [
 
 [dev-dependencies]
 hound = "3"
+image = "0.25"

@@ -1,3 +1,5 @@
+mod settings;
+
 use std::sync::{Arc, Mutex};
 
 use tauri::{
@@ -109,8 +111,20 @@ pub fn run() {
                 let _ = w.set_focus();
             }
         }))
+        // 开机自启:Windows 走注册表 Run 键;MacosLauncher 参数仅 macOS 生效。
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .manage(ControlSlot::default())
-        .invoke_handler(tauri::generate_handler![cancel_recording])
+        .invoke_handler(tauri::generate_handler![
+            cancel_recording,
+            settings::get_config,
+            settings::save_config,
+            settings::test_llm,
+            settings::restart_app,
+            settings::open_config_dir
+        ])
         .setup(|app| {
             let settings = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
