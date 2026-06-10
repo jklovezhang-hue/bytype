@@ -53,6 +53,7 @@ export default function AboutPage({ cfgPath }: { cfgPath: string | null }) {
       </div>
       <Section title="作者与联系">
         <p className="text-sm text-neutral-700 dark:text-neutral-300">© 2026 Yong Zhang</p>
+        <p className="text-sm text-neutral-700 dark:text-neutral-300">本软件以 MIT 许可证开源</p>
         <p className="text-sm text-neutral-700 dark:text-neutral-300 flex items-center gap-2">
           <a className="text-blue-600 dark:text-blue-400 hover:underline" href={`mailto:${EMAIL}`}>
             {EMAIL}
