@@ -28,7 +28,9 @@ export default function DownloadStep({
       await downloadModel();
       onReady();
     } catch (e) {
-      setErr(String(e));
+      const msg = String(e);
+      // 用户主动取消不算失败,不显示红色错误(进度条消失、回到「开始下载」即可)
+      setErr(msg.includes("已取消") ? null : msg);
     } finally {
       setPhase("idle");
     }
