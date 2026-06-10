@@ -1,3 +1,5 @@
+mod settings;
+
 use std::sync::{Arc, Mutex};
 
 use tauri::{
@@ -110,7 +112,14 @@ pub fn run() {
             }
         }))
         .manage(ControlSlot::default())
-        .invoke_handler(tauri::generate_handler![cancel_recording])
+        .invoke_handler(tauri::generate_handler![
+            cancel_recording,
+            settings::get_config,
+            settings::save_config,
+            settings::test_llm,
+            settings::restart_app,
+            settings::open_config_dir
+        ])
         .setup(|app| {
             let settings = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
