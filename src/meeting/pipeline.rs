@@ -2,6 +2,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use crate::corrector::Corrector;
+use super::diarize::diarize_segments;
 use super::segment::{vad_segments, Segment};
 use super::transcribe::SegmentTranscriber;
 use super::transcript::{Line, Speaker, Transcript};
@@ -52,6 +53,14 @@ pub fn clean_transcript(t: &mut Transcript, corrector: &Corrector) {
     }
 }
 
+/// diarization 选项。
+pub struct DiarOpts<'a> {
+    pub enabled: bool,
+    pub segmentation_model: &'a str,
+    pub embedding_model: &'a str,
+    pub speakers: i32,
+}
+
 /// 离线转写一场会议:mic→「我」,system→「对方」,按时间归并。
 pub fn transcribe_meeting(
     base: &str,
@@ -60,11 +69,55 @@ pub fn transcribe_meeting(
     asr_model_dir: &str,
     language: &str,
     vad_model: &str,
+    diar: DiarOpts,
 ) -> Result<Transcript> {
     let mut tr = SegmentTranscriber::load(asr_model_dir, language)?;
     let mic = read_wav_mono(mic_wav)?;
     let sys = read_wav_mono(system_wav)?;
     let mine = lines_for_track(&mic, Speaker::Me, vad_model, &mut tr)?;
-    let theirs = lines_for_track(&sys, Speaker::Other, vad_model, &mut tr)?;
+
+    let theirs = if diar.enabled
+        && !sys.is_empty()
+        && Path::new(diar.segmentation_model).exists()
+        && Path::new(diar.embedding_model).exists()
+    {
+        match lines_for_system_diarized(&sys, &diar, &mut tr) {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("说话人分离失败,退化为不分人:{e}");
+                lines_for_track(&sys, Speaker::Other, vad_model, &mut tr)?
+            }
+        }
+    } else {
+        lines_for_track(&sys, Speaker::Other, vad_model, &mut tr)?
+    };
     Ok(Transcript::merge(base, mine, theirs))
+}
+
+fn lines_for_system_diarized(
+    samples: &[f32],
+    diar: &DiarOpts,
+    tr: &mut SegmentTranscriber,
+) -> Result<Vec<Line>> {
+    let segs = diarize_segments(samples, diar.segmentation_model, diar.embedding_model, diar.speakers)?;
+    let mut lines = Vec::new();
+    let n = samples.len();
+    for s in segs {
+        let a = ((s.start_ms * 16) as usize).min(n);
+        let b = ((s.end_ms * 16) as usize).min(n);
+        if b <= a {
+            continue;
+        }
+        let text = tr.transcribe_seg(&samples[a..b]);
+        if text.trim().is_empty() {
+            continue;
+        }
+        lines.push(Line {
+            start_ms: s.start_ms,
+            end_ms: s.end_ms,
+            speaker: Speaker::OtherId(s.speaker as u32 + 1),
+            text,
+        });
+    }
+    Ok(lines)
 }
