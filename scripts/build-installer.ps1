@@ -35,6 +35,19 @@ foreach ($p in $patterns) {
 if ($copied -eq 0) { throw "no engine DLL found in target/release; cannot bundle" }
 Write-Host "    copied $copied DLL(s)" -ForegroundColor Green
 
+# 同时拷会议模型(VAD + 分人,共约 33MB)到 runtime/models/;bundle.resources 收为 ./models/。
+# SenseVoice(约 228MB)不打包,仍由首启向导下载/导入。
+$rtModels = Join-Path $runtime "models"
+New-Item -ItemType Directory -Force -Path $rtModels | Out-Null
+$models = @("silero_vad.onnx", "segmentation.onnx", "speaker_embedding.onnx")
+$mcopied = 0
+foreach ($m in $models) {
+    $mp = Join-Path $repo "models\$m"
+    if (Test-Path $mp) { Copy-Item $mp -Destination $rtModels -Force; $mcopied++ }
+}
+if ($mcopied -ne $models.Count) { throw "meeting models missing in models/; need silero_vad/segmentation/speaker_embedding .onnx" }
+Write-Host "    copied $mcopied meeting model(s)" -ForegroundColor Green
+
 # 步骤 3:打包。RUSTFLAGS 不变 → 此处 cargo 构建命中步骤 1 缓存(增量空转),打包器收 runtime/*.dll
 Write-Host "[3/3] npm run tauri build ..." -ForegroundColor Cyan
 npm run tauri build

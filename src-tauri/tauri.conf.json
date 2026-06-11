@@ -42,7 +42,7 @@
     "copyright": "© 2026 Yong Zhang. MIT 许可。",
     "shortDescription": "按住说话的语音输入工具",
     "longDescription": "ByType——按住热键说话,本地 SenseVoice 识别 + LLM 整理,松手即把文字注入当前应用。",
-    "resources": { "runtime/*.dll": "./" },
+    "resources": { "runtime/*.dll": "./", "runtime/models/*.onnx": "models/" },
     "windows": {
       "nsis": {
         "installMode": "currentUser",
