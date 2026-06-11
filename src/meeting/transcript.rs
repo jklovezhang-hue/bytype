@@ -101,6 +101,26 @@ impl Transcript {
     pub fn from_json(s: &str) -> serde_json::Result<Transcript> {
         serde_json::from_str(s)
     }
+
+    /// 把分人编号(`OtherId`)按**最终出现顺序**重排为 1,2,3…(连续不跳号)。
+    /// 应在清理/丢弃空段之后调用,使存活的说话人编号连续;`Me`/`Other` 不动。
+    pub fn renumber_speakers(&mut self) {
+        use std::collections::HashMap;
+        let mut map: HashMap<u32, u32> = HashMap::new();
+        let mut next: u32 = 1;
+        for l in &mut self.lines {
+            let raw = match &l.speaker {
+                Speaker::OtherId(raw) => *raw,
+                _ => continue,
+            };
+            let id = *map.entry(raw).or_insert_with(|| {
+                let v = next;
+                next += 1;
+                v
+            });
+            l.speaker = Speaker::OtherId(id);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -147,6 +167,24 @@ mod tests {
         let theirs = vec![line(0, Speaker::OtherId(1), "甲"), line(1000, Speaker::OtherId(2), "乙")];
         let t = Transcript::merge("m", vec![], theirs);
         assert_eq!(t.lines.len(), 2);
+    }
+
+    #[test]
+    fn renumber_speakers_by_appearance() {
+        let mut t = Transcript {
+            base: "b".into(),
+            lines: vec![
+                line(0, Speaker::OtherId(3), "甲"),
+                line(1000, Speaker::Me, "我"),
+                line(2000, Speaker::OtherId(1), "乙"),
+                line(3000, Speaker::OtherId(3), "甲又说"),
+            ],
+        };
+        t.renumber_speakers();
+        assert_eq!(t.lines[0].speaker, Speaker::OtherId(1)); // 原3 首次出现→1
+        assert_eq!(t.lines[1].speaker, Speaker::Me); // 不动
+        assert_eq!(t.lines[2].speaker, Speaker::OtherId(2)); // 原1→2
+        assert_eq!(t.lines[3].speaker, Speaker::OtherId(1)); // 原3→1(一致)
     }
 
     #[test]

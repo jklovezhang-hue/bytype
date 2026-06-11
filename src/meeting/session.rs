@@ -100,6 +100,7 @@ impl MeetingSession {
         segmentation_model: String,
         embedding_model: String,
         diar_speakers: i32,
+        on_done: impl FnOnce(bool) + Send + 'static,
     ) -> Result<PathBuf> {
         if let Some(m) = self.mic {
             m.stop()?;
@@ -128,7 +129,7 @@ impl MeetingSession {
             .unwrap_or_default();
         std::thread::spawn(move || {
             eprintln!("会议转写中…(可能数分钟)");
-            match super::pipeline::transcribe_meeting(
+            let success = match super::pipeline::transcribe_meeting(
                 &base,
                 &paths.mic_wav,
                 &paths.system_wav,
@@ -148,6 +149,8 @@ impl MeetingSession {
                             super::pipeline::clean_transcript(&mut t, &c);
                         }
                     }
+                    // 清理/丢空段之后,把分人编号按出场顺序重排为 1,2,3…(连续不跳号)。
+                    t.renumber_speakers();
                     let json = paths.dir.join(format!("{base}.json"));
                     let _ = std::fs::write(&json, t.to_json());
                     let minutes = if llm.enabled && !llm.base_url.trim().is_empty() {
@@ -173,15 +176,20 @@ impl MeetingSession {
                         t.lines.len(),
                         if minutes.is_some() { " + 纪要" } else { "" }
                     );
+                    true
                 }
-                Err(e) => eprintln!("会议转写失败(录音与 MP3 已保留):{e}"),
-            }
+                Err(e) => {
+                    eprintln!("会议转写失败(录音与 MP3 已保留):{e}");
+                    false
+                }
+            };
             for p in plan_retention(&paths, retention) {
                 let _ = std::fs::remove_file(p);
             }
             if retention == AudioRetention::None {
                 let _ = std::fs::remove_file(&paths.mp3);
             }
+            on_done(success);
         });
 
         Ok(self.paths.mp3.clone())

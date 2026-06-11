@@ -285,10 +285,28 @@ fn stop_meeting(app: &tauri::AppHandle) {
     {
         c.set_dictation_suspended(false);
     }
-    // 先即时收起浮窗、恢复托盘(stop 处理可能编码 MP3 耗时一会儿)。
+    // 先即时收起浮窗、恢复托盘(转写在后台进行,药丸消失以便继续用听写)。
     show_meeting_overlay(app, false);
     refresh_tray(app, false, None);
     if let Some(sess) = sess {
+        // 托盘 tooltip 提示"正在转录",后台转写完成再由 on_done 恢复 + 浮窗闪一下。
+        if let Some(tray) = app.tray_by_id("main") {
+            let _ = tray.set_tooltip(Some("ByType · 正在转录会议…"));
+        }
+        let app2 = app.clone();
+        let on_done = move |success: bool| {
+            if let Some(tray) = app2.tray_by_id("main") {
+                let _ = tray.set_tooltip(Some("ByType"));
+            }
+            // 浮窗闪一下完成/失败提示(由 overlay 自行 3 秒后隐藏)。
+            if let Some(w) = app2.get_webview_window("overlay") {
+                position_bottom_center(&w);
+                let _ = w.show();
+                raise_topmost(&w);
+                let _ = app2.emit_to("overlay", "bt:meeting", if success { "done" } else { "failed" });
+            }
+            eprintln!("会议处理结束: success={success}");
+        };
         match sess.stop(
             cfg.meeting.audio_retention,
             cfg.meeting.archive_bitrate,
@@ -302,9 +320,15 @@ fn stop_meeting(app: &tauri::AppHandle) {
             cfg.meeting.segmentation_model.clone(),
             cfg.meeting.embedding_model.clone(),
             cfg.meeting.diarization_speakers,
+            on_done,
         ) {
-            Ok(mp3) => eprintln!("会议结束,已存: {}", mp3.display()),
-            Err(e) => eprintln!("会议结束处理失败: {e}"),
+            Ok(mp3) => eprintln!("会议结束,录音已存: {}(后台转写中)", mp3.display()),
+            Err(e) => {
+                eprintln!("会议结束处理失败: {e}");
+                if let Some(tray) = app.tray_by_id("main") {
+                    let _ = tray.set_tooltip(Some("ByType"));
+                }
+            }
         }
     }
 }

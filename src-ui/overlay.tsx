@@ -25,7 +25,10 @@ function Pill() {
   // 会议录制中状态(独立于听写;录制期间优先显示会议药丸 + 时分秒计时)。
   const [meeting, setMeeting] = useState(false);
   const [mSecs, setMSecs] = useState(0);
+  // 会议转写完成/失败的短暂提示(显示几秒后自动隐藏)。
+  const [mNote, setMNote] = useState<string | null>(null);
   const mTick = useRef<number | null>(null);
+  const noteT = useRef<number | null>(null);
   const stopMTick = () => {
     if (mTick.current !== null) {
       clearInterval(mTick.current);
@@ -94,17 +97,31 @@ function Pill() {
       }
     });
     // 会议录制中:整场显示一个计时药丸(时分秒),由后端 start/stop 驱动。
+    // done/failed:后台转写完成的短暂提示(显示 ~3.2s 后自动隐藏窗口)。
     const unMeeting = listen<string>("bt:meeting", (e) => {
       if (e.payload === "recording") {
         stopMTick();
         setMSecs(0);
+        setMNote(null);
+        if (noteT.current !== null) clearTimeout(noteT.current);
         const start = Date.now();
         mTick.current = window.setInterval(
           () => setMSecs(Math.floor((Date.now() - start) / 1000)),
           250
         );
         setMeeting(true);
+      } else if (e.payload === "done" || e.payload === "failed") {
+        stopMTick();
+        setMeeting(false);
+        setMSecs(0);
+        setMNote(e.payload === "done" ? "✅ 会议纪要已就绪" : "✕ 会议处理失败");
+        if (noteT.current !== null) clearTimeout(noteT.current);
+        noteT.current = window.setTimeout(() => {
+          setMNote(null);
+          getCurrentWindow().hide();
+        }, 3200);
       } else {
+        // "stopped"
         stopMTick();
         setMeeting(false);
         setMSecs(0);
@@ -144,6 +161,15 @@ function Pill() {
         </span>
         <span className="time">{fmtClock(mSecs)}</span>
         <style>{`@keyframes btblink{0%,100%{opacity:1}50%{opacity:.25}}`}</style>
+      </div>
+    );
+  }
+
+  // 会议转写完成/失败的短暂提示。
+  if (mNote) {
+    return (
+      <div className="pill show" title="会议纪要">
+        <span className="time" style={{ fontSize: 13, whiteSpace: "nowrap" }}>{mNote}</span>
       </div>
     );
   }
