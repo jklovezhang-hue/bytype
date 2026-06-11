@@ -70,6 +70,27 @@ impl Corrector {
         self.process(text, &sys)
     }
 
+    /// 会议整段清理:与 `clean_line` 同(clean 预设 + 词库),但**清理后为空不回退原文**
+    /// —— 让纯语气词段(只含「嗯/yeah」之类)清成空串,由调用方丢弃该段。
+    /// 关闭 LLM 时返回原文;**API 调用失败时也返回原文**(只在确实清成空时才返回空)。
+    pub fn clean_for_meeting(&self, text: &str) -> String {
+        if !self.cfg.enabled {
+            return text.to_string();
+        }
+        let sys = compose_system_prompt(
+            &crate::config::preset_prompt("clean"),
+            self.cfg.vocabulary_line().as_deref(),
+            None,
+        );
+        match self.try_chat(&sys, text.trim()) {
+            Ok(t) => t.trim().to_string(), // 可能为空 → 调用方丢弃该段
+            Err(e) => {
+                eprintln!("会议转写清理失败,保留原文: {e}");
+                text.to_string()
+            }
+        }
+    }
+
     /// 用给定系统提示词处理文本(用户消息即文本本身);失败回退原文。
     fn process(&self, raw: &str, system_prompt: &str) -> String {
         let trimmed = raw.trim();

@@ -46,11 +46,20 @@ fn lines_for_track(
     Ok(lines)
 }
 
-/// 对转写逐行做 LLM 清理(就地修改 text)。
+/// 对转写逐行(已按说话人合并成段)做 LLM 清理:整段去语气词/纠错/补标点;
+/// 清理后为空的行(纯语气词段,如只含「嗯/yeah」)直接丢弃。
 pub fn clean_transcript(t: &mut Transcript, corrector: &Corrector) {
-    for l in &mut t.lines {
-        l.text = corrector.clean_line(&l.text);
+    let lines = std::mem::take(&mut t.lines);
+    let mut out = Vec::with_capacity(lines.len());
+    for mut l in lines {
+        let cleaned = corrector.clean_for_meeting(&l.text);
+        if cleaned.trim().is_empty() {
+            continue; // 纯语气词段被清空 → 丢弃
+        }
+        l.text = cleaned;
+        out.push(l);
     }
+    t.lines = out;
 }
 
 /// diarization 选项。

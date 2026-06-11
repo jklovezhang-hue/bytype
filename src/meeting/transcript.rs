@@ -48,7 +48,9 @@ pub fn ms_to_clock(ms: u64) -> String {
 }
 
 impl Transcript {
-    /// 归并两条带说话人的行列表,按起始时间升序;丢弃空文本行(trim 后为空)。
+    /// 归并两条带说话人的行列表,按起始时间升序;丢弃空文本行(trim 后为空);
+    /// 再把**相邻的同一说话人**片段合并成段(单一说话人连续发言成一段,
+    /// 与系统轨 diarization 的"按轮成段"一致;被其它说话人打断则分段)。
     pub fn merge(base: &str, mine: Vec<Line>, theirs: Vec<Line>) -> Transcript {
         let mut lines: Vec<Line> = mine
             .into_iter()
@@ -56,7 +58,19 @@ impl Transcript {
             .filter(|l| !l.text.trim().is_empty())
             .collect();
         lines.sort_by_key(|l| l.start_ms);
-        Transcript { base: base.to_string(), lines }
+
+        let mut coalesced: Vec<Line> = Vec::with_capacity(lines.len());
+        for l in lines {
+            match coalesced.last_mut() {
+                Some(prev) if prev.speaker == l.speaker => {
+                    prev.text.push(' ');
+                    prev.text.push_str(l.text.trim());
+                    prev.end_ms = l.end_ms.max(prev.end_ms);
+                }
+                _ => coalesced.push(l),
+            }
+        }
+        Transcript { base: base.to_string(), lines: coalesced }
     }
 
     /// 仅转写正文(无标题),每行 `[mm:ss] **说话人**:文本`。
@@ -114,6 +128,25 @@ mod tests {
         let t = Transcript::merge("m", mine, vec![]);
         assert_eq!(t.lines.len(), 1);
         assert_eq!(t.lines[0].text, "在");
+    }
+
+    #[test]
+    fn merge_coalesces_consecutive_same_speaker() {
+        // 同一说话人连续多段 → 合并成一段(时间跨到最后一段的 end)。
+        let mine = vec![line(0, Speaker::Me, "我说一句"), line(3000, Speaker::Me, "又说一句")];
+        let t = Transcript::merge("m", mine, vec![]);
+        assert_eq!(t.lines.len(), 1);
+        assert_eq!(t.lines[0].start_ms, 0);
+        assert_eq!(t.lines[0].end_ms, 4000);
+        assert!(t.lines[0].text.contains("我说一句") && t.lines[0].text.contains("又说一句"));
+    }
+
+    #[test]
+    fn merge_keeps_different_speakers_separate() {
+        // 不同说话人(含分人后的 OtherId)不合并。
+        let theirs = vec![line(0, Speaker::OtherId(1), "甲"), line(1000, Speaker::OtherId(2), "乙")];
+        let t = Transcript::merge("m", vec![], theirs);
+        assert_eq!(t.lines.len(), 2);
     }
 
     #[test]
