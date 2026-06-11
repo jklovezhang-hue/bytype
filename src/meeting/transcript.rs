@@ -5,13 +5,15 @@ use serde::{Deserialize, Serialize};
 pub enum Speaker {
     Me,
     Other,
+    OtherId(u32),
 }
 
 impl Speaker {
-    pub fn label(&self) -> &'static str {
+    pub fn label(&self) -> String {
         match self {
-            Speaker::Me => "我",
-            Speaker::Other => "对方",
+            Speaker::Me => "我".to_string(),
+            Speaker::Other => "对方".to_string(),
+            Speaker::OtherId(n) => format!("对方·说话人{n}"),
         }
     }
 }
@@ -132,6 +134,14 @@ mod tests {
         assert!(md.contains("# 会议转写 2026-06-11_120000"));
         assert!(md.contains("`[00:00]` **我**:你好"));
         assert!(md.contains("`[00:02]` **对方**:在"));
+    }
+
+    #[test]
+    fn speaker_otherid_label() {
+        assert_eq!(Speaker::Me.label(), "我");
+        assert_eq!(Speaker::Other.label(), "对方");
+        assert_eq!(Speaker::OtherId(1).label(), "对方·说话人1");
+        assert_eq!(Speaker::OtherId(3).label(), "对方·说话人3");
     }
 
     #[test]
