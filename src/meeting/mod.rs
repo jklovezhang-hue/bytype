@@ -27,6 +27,6 @@ pub use capture_system::SystemCapture;
 pub use transcript::{Line, Speaker, Transcript};
 pub use segment::{vad_segments, Segment};
 pub use transcribe::SegmentTranscriber;
-pub use pipeline::{clean_transcript, transcribe_meeting};
+pub use pipeline::{clean_transcript, transcribe_meeting, DiarOpts};
 pub mod minutes;
 pub use minutes::{assemble_md, transcript_to_input};

@@ -96,6 +96,10 @@ impl MeetingSession {
         llm: crate::config::LlmConfig,
         minutes_prompt: String,
         clean: bool,
+        diarization: bool,
+        segmentation_model: String,
+        embedding_model: String,
+        diar_speakers: i32,
     ) -> Result<PathBuf> {
         if let Some(m) = self.mic {
             m.stop()?;
@@ -131,6 +135,12 @@ impl MeetingSession {
                 &asr_model_dir,
                 &language,
                 &vad_model,
+                super::pipeline::DiarOpts {
+                    enabled: diarization,
+                    segmentation_model: &segmentation_model,
+                    embedding_model: &embedding_model,
+                    speakers: diar_speakers,
+                },
             ) {
                 Ok(mut t) => {
                     if clean && llm.enabled && !llm.base_url.trim().is_empty() {

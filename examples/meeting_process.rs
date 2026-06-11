@@ -15,6 +15,12 @@ fn main() -> anyhow::Result<()> {
         "./models/sensevoice",
         "auto",
         "./models/silero_vad.onnx",
+        voice_input::meeting::DiarOpts {
+            enabled: true,
+            segmentation_model: "./models/segmentation.onnx",
+            embedding_model: "./models/speaker_embedding.onnx",
+            speakers: 0,
+        },
     )?;
     std::fs::write(dir.join(format!("{base}.md")), t.to_markdown())?;
     std::fs::write(dir.join(format!("{base}.json")), t.to_json())?;

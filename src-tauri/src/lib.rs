@@ -298,6 +298,10 @@ fn stop_meeting(app: &tauri::AppHandle) {
             cfg.llm.clone(),
             cfg.meeting.effective_minutes_prompt(),
             cfg.meeting.clean_transcript,
+            cfg.meeting.diarization,
+            cfg.meeting.segmentation_model.clone(),
+            cfg.meeting.embedding_model.clone(),
+            cfg.meeting.diarization_speakers,
         ) {
             Ok(mp3) => eprintln!("会议结束,已存: {}", mp3.display()),
             Err(e) => eprintln!("会议结束处理失败: {e}"),
