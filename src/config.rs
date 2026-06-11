@@ -205,6 +205,8 @@ pub struct MeetingConfig {
     pub archive_bitrate: u32,
     /// Silero VAD 模型路径(相对路径按 resolve 规则解析)。
     pub vad_model: String,
+    /// 自定义纪要提示词;留空则用内置默认。
+    pub minutes_prompt: String,
 }
 
 impl Default for MeetingConfig {
@@ -217,9 +219,27 @@ impl Default for MeetingConfig {
             audio_retention_days: 7,
             archive_bitrate: 48,
             vad_model: "./models/silero_vad.onnx".into(),
+            minutes_prompt: String::new(),
         }
     }
 }
+
+impl MeetingConfig {
+    /// 实际纪要提示词:自定义优先,否则内置默认。
+    pub fn effective_minutes_prompt(&self) -> String {
+        if self.minutes_prompt.trim().is_empty() {
+            PROMPT_MINUTES.to_string()
+        } else {
+            self.minutes_prompt.clone()
+        }
+    }
+}
+
+/// 内置会议纪要提示词。
+const PROMPT_MINUTES: &str = "你是会议纪要助理。下面是一段带时间戳与说话人(我/对方)的会议转写。\
+请整理成结构化的中文会议纪要,包含:1) 会议主题(若能判断);2) 关键讨论点;3) 决议/结论;\
+4) 待办事项(含负责人与时限,若提及)。忠实原意,不要编造未提及的内容;条理清晰,用 Markdown\
+(二级标题与列表)。只输出纪要正文,不要复述原始转写。";
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(default)]
@@ -378,6 +398,7 @@ impl Config {
         cfg.sound.start_sound = resolve_sound_path(&base, &cfg.sound.start_sound);
         cfg.sound.end_sound = resolve_sound_path(&base, &cfg.sound.end_sound);
         cfg.meeting.vad_model = resolve_model_dir(&base, &cfg.meeting.vad_model);
+        cfg.meeting.output_dir = resolve_model_dir(&base, &cfg.meeting.output_dir);
         Ok(cfg)
     }
 }
@@ -656,6 +677,20 @@ style = "技术"
     fn meeting_config_has_vad_model_default() {
         let m = MeetingConfig::default();
         assert_eq!(m.vad_model, "./models/silero_vad.onnx");
+    }
+
+    #[test]
+    fn meeting_minutes_prompt_defaults_to_builtin() {
+        let m = MeetingConfig::default();
+        assert_eq!(m.minutes_prompt, "");
+        assert!(m.effective_minutes_prompt().contains("会议纪要"));
+    }
+
+    #[test]
+    fn meeting_effective_minutes_prompt_prefers_custom() {
+        let mut m = MeetingConfig::default();
+        m.minutes_prompt = "自定义纪要提示".into();
+        assert_eq!(m.effective_minutes_prompt(), "自定义纪要提示");
     }
 
     #[test]
