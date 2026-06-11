@@ -60,6 +60,16 @@ impl Corrector {
         }
     }
 
+    /// 会议转写逐段清理:用「clean」预设(忠实清理,不改写)+ 词库。失败/禁用回退原文。
+    pub fn clean_line(&self, text: &str) -> String {
+        let sys = compose_system_prompt(
+            &crate::config::preset_prompt("clean"),
+            self.cfg.vocabulary_line().as_deref(),
+            None,
+        );
+        self.process(text, &sys)
+    }
+
     /// 用给定系统提示词处理文本(用户消息即文本本身);失败回退原文。
     fn process(&self, raw: &str, system_prompt: &str) -> String {
         let trimmed = raw.trim();
@@ -260,5 +270,13 @@ mod tests {
         c.enabled = false;
         let corrector = Corrector::new(c).unwrap();
         assert_eq!(corrector.command("改短", "一段很长的文本"), "一段很长的文本");
+    }
+
+    #[test]
+    fn clean_line_disabled_returns_raw() {
+        let mut c = cfg();
+        c.enabled = false;
+        let corrector = Corrector::new(c).unwrap();
+        assert_eq!(corrector.clean_line("嗯那个文本啊"), "嗯那个文本啊");
     }
 }
