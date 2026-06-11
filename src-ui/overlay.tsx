@@ -160,12 +160,13 @@ function Pill() {
     );
   }
 
-  // 听写正在进行(录音/处理)时显示听写药丸 —— 即使会议在录制中也临时让位给它,
-  // 给出听写反馈;会议计时在后台(mTick)持续不受影响,听写结束后自动回到会议药丸。
-  const dictating = phase === "recording" || phase === "processing";
+  // 听写有任何活动(录音/处理/✓完成提示)时显示听写药丸 —— 即使会议在录制中也临时让位,
+  // 给出完整反馈(波形→处理→✓);会议计时在后台(mTick)持续不受影响,
+  // 听写状态归 idle 后自动回到会议药丸。
+  const dictationActive = phase !== "idle";
 
   // 会议录制中且当前无听写活动:显示会议药丸(持续计时)。
-  if (meeting && !dictating) {
+  if (meeting && !dictationActive) {
     return (
       <div className="pill show" title="会议录制中(结束请用托盘菜单)">
         <span className="left">
@@ -186,7 +187,9 @@ function Pill() {
     );
   }
 
-  const show = dictating || (phase !== "idle" && !leaving);
+  // 会议进行中不走淡出(leaving),让 ✓ 一直亮到归 idle 再直接切回会议药丸(无空窗);
+  // 非会议场景维持原淡出行为(phase!==idle && !leaving)。
+  const show = dictationActive && (meeting || !leaving);
 
   return (
     <div className={`pill ${show ? "show" : ""}`} onClick={onClick} title="点击取消">
