@@ -1,5 +1,13 @@
 use std::path::{Path, PathBuf};
-use crate::config::AudioRetention;
+use anyhow::{Context, Result};
+use chrono::{Datelike, Timelike};
+use crate::config::{AudioRetention, RecordMode};
+use super::capture_mic::MicCapture;
+use super::capture_system::SystemCapture;
+use super::mix::mix_tracks;
+use super::mode::record_behavior;
+use super::mp3::encode_mp3_file;
+use super::naming::meeting_base_name;
 
 /// 一场会议在磁盘上的各文件路径(基于文件夹与基名)。
 #[derive(Debug, Clone, PartialEq)]
@@ -32,6 +40,76 @@ pub fn plan_retention(paths: &MeetingPaths, retention: AudioRetention) -> Vec<Pa
         }
         // tracks:都留。
         AudioRetention::Tracks => Vec::new(),
+    }
+}
+
+/// 进行中的一场会议。
+pub struct MeetingSession {
+    paths: MeetingPaths,
+    mic: Option<MicCapture>,
+    system: Option<SystemCapture>,
+}
+
+impl MeetingSession {
+    /// 取当前本地时间生成基名(放调用边界,纯逻辑不碰时钟)。
+    fn now_base() -> String {
+        let now = chrono::Local::now();
+        meeting_base_name(
+            now.year(),
+            now.month(),
+            now.day(),
+            now.hour(),
+            now.minute(),
+            now.second(),
+        )
+    }
+
+    /// 开始一场会议:建文件夹、按模式起采集。
+    pub fn start(mode: RecordMode, output_root: &Path) -> Result<MeetingSession> {
+        let base = Self::now_base();
+        let paths = MeetingPaths::new(output_root, &base);
+        std::fs::create_dir_all(&paths.dir)
+            .with_context(|| format!("建会议文件夹失败: {}", paths.dir.display()))?;
+        let b = record_behavior(mode);
+        let mic = if b.capture_mic {
+            Some(MicCapture::start(paths.mic_wav.clone())?)
+        } else {
+            None
+        };
+        let system = if b.capture_system {
+            Some(SystemCapture::start(paths.system_wav.clone())?)
+        } else {
+            None
+        };
+        Ok(MeetingSession { paths, mic, system })
+    }
+
+    /// 结束:停采集 → 混音 → MP3 → 按保留档删原始轨。返回 mp3 路径。
+    pub fn stop(self, retention: AudioRetention, bitrate: u32) -> Result<PathBuf> {
+        if let Some(m) = self.mic {
+            m.stop()?;
+        }
+        if let Some(s) = self.system {
+            s.stop()?;
+        }
+        let mut tracks: Vec<Vec<i16>> = Vec::new();
+        for wav in [&self.paths.mic_wav, &self.paths.system_wav] {
+            if wav.exists() {
+                let mut r = hound::WavReader::open(wav)
+                    .with_context(|| format!("读 WAV 失败: {}", wav.display()))?;
+                let samples: Vec<i16> = r.samples::<i16>().filter_map(|s| s.ok()).collect();
+                tracks.push(samples);
+            }
+        }
+        let mixed = mix_tracks(&tracks);
+        encode_mp3_file(&self.paths.mp3, &mixed, bitrate)?;
+        for p in plan_retention(&self.paths, retention) {
+            let _ = std::fs::remove_file(p);
+        }
+        if retention == AudioRetention::None {
+            let _ = std::fs::remove_file(&self.paths.mp3);
+        }
+        Ok(self.paths.mp3.clone())
     }
 }
 

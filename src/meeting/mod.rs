@@ -15,6 +15,6 @@ pub use resample::resample_to_16k;
 pub use mix::mix_tracks;
 pub use wav::WavSink;
 pub use mp3::encode_mp3_file;
-pub use session::{MeetingPaths, plan_retention};
+pub use session::{MeetingPaths, MeetingSession, plan_retention};
 pub use capture_mic::MicCapture;
 pub use capture_system::SystemCapture;
