@@ -209,6 +209,12 @@ pub struct MeetingConfig {
     pub minutes_prompt: String,
     /// 是否对会议转写逐段做 LLM 清理(去语气词/纠错/标点);需 LLM 启用。
     pub clean_transcript: bool,
+    /// 说话人分段模型(pyannote)路径。
+    pub segmentation_model: String,
+    /// 声纹嵌入模型路径。
+    pub embedding_model: String,
+    /// 期望说话人数;0/负=自动(按阈值聚类)。
+    pub diarization_speakers: i32,
 }
 
 impl Default for MeetingConfig {
@@ -223,6 +229,9 @@ impl Default for MeetingConfig {
             vad_model: "./models/silero_vad.onnx".into(),
             minutes_prompt: String::new(),
             clean_transcript: true,
+            segmentation_model: "./models/segmentation.onnx".into(),
+            embedding_model: "./models/speaker_embedding.onnx".into(),
+            diarization_speakers: 0,
         }
     }
 }
@@ -402,6 +411,8 @@ impl Config {
         cfg.sound.end_sound = resolve_sound_path(&base, &cfg.sound.end_sound);
         cfg.meeting.vad_model = resolve_model_dir(&base, &cfg.meeting.vad_model);
         cfg.meeting.output_dir = resolve_model_dir(&base, &cfg.meeting.output_dir);
+        cfg.meeting.segmentation_model = resolve_model_dir(&base, &cfg.meeting.segmentation_model);
+        cfg.meeting.embedding_model = resolve_model_dir(&base, &cfg.meeting.embedding_model);
         Ok(cfg)
     }
 }
@@ -717,6 +728,14 @@ style = "技术"
     #[test]
     fn meeting_clean_transcript_defaults_true() {
         assert!(MeetingConfig::default().clean_transcript);
+    }
+
+    #[test]
+    fn meeting_diarization_model_defaults() {
+        let m = MeetingConfig::default();
+        assert_eq!(m.segmentation_model, "./models/segmentation.onnx");
+        assert_eq!(m.embedding_model, "./models/speaker_embedding.onnx");
+        assert_eq!(m.diarization_speakers, 0);
     }
 
     #[test]
