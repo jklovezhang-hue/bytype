@@ -18,6 +18,7 @@ pub struct Config {
     pub overlay: OverlayConfig,
     pub sound: SoundConfig,
     pub model: ModelConfig,
+    pub meeting: MeetingConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -72,6 +73,7 @@ impl Default for Config {
             overlay: OverlayConfig::default(),
             sound: SoundConfig::default(),
             model: ModelConfig::default(),
+            meeting: MeetingConfig::default(),
         }
     }
 }
@@ -158,6 +160,60 @@ impl Default for ModelConfig {
         ModelConfig {
             model_url: "https://hf-mirror.com/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/model.int8.onnx".into(),
             tokens_url: "https://hf-mirror.com/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/tokens.txt".into(),
+        }
+    }
+}
+
+/// 会议录音模式。
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RecordMode {
+    /// 麦克风 + 系统声音。
+    MicSystem,
+    /// 只录系统声音。
+    System,
+    /// 只录麦克风。
+    Mic,
+}
+
+/// 音频保留档。
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AudioRetention {
+    /// 都删,只剩转写+纪要。
+    None,
+    /// 只留 <base>.mp3 存档(默认)。
+    Mixed,
+    /// 留 mp3 + 双轨 WAV。
+    Tracks,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(default)]
+pub struct MeetingConfig {
+    /// 会议文件夹根目录(相对路径按 resolve 规则解析)。
+    pub output_dir: String,
+    /// 开始弹窗预选的默认模式。
+    pub default_mode: RecordMode,
+    /// 是否分说话人(有系统轨时生效;M1 不实现,仅存配置)。
+    pub diarization: bool,
+    /// 音频保留档。
+    pub audio_retention: AudioRetention,
+    /// 自动删几天前音频(0=永久;M1 仅存配置)。
+    pub audio_retention_days: u32,
+    /// 存档 MP3 比特率(kbps,单声道)。
+    pub archive_bitrate: u32,
+}
+
+impl Default for MeetingConfig {
+    fn default() -> Self {
+        MeetingConfig {
+            output_dir: "./meetings".into(),
+            default_mode: RecordMode::MicSystem,
+            diarization: true,
+            audio_retention: AudioRetention::Mixed,
+            audio_retention_days: 7,
+            archive_bitrate: 48,
         }
     }
 }
@@ -590,5 +646,35 @@ style = "技术"
         let text = toml::to_string_pretty(&cfg).unwrap();
         let back: Config = toml::from_str(&text).unwrap();
         assert_eq!(back, cfg);
+    }
+
+    #[test]
+    fn meeting_config_defaults() {
+        let m = MeetingConfig::default();
+        assert_eq!(m.output_dir, "./meetings");
+        assert_eq!(m.default_mode, RecordMode::MicSystem);
+        assert!(m.diarization);
+        assert_eq!(m.audio_retention, AudioRetention::Mixed);
+        assert_eq!(m.audio_retention_days, 7);
+        assert_eq!(m.archive_bitrate, 48);
+    }
+
+    #[test]
+    fn meeting_config_partial_toml_uses_defaults() {
+        let cfg: Config = toml::from_str("[meeting]\naudio_retention = \"none\"\n").unwrap();
+        assert_eq!(cfg.meeting.audio_retention, AudioRetention::None);
+        assert_eq!(cfg.meeting.default_mode, RecordMode::MicSystem);
+    }
+
+    #[test]
+    fn record_mode_serde_roundtrip() {
+        for (m, s) in [
+            (RecordMode::MicSystem, "mic_system"),
+            (RecordMode::System, "system"),
+            (RecordMode::Mic, "mic"),
+        ] {
+            let toml_s = toml::to_string(&MeetingConfig { default_mode: m, ..Default::default() }).unwrap();
+            assert!(toml_s.contains(s), "{toml_s} should contain {s}");
+        }
     }
 }
