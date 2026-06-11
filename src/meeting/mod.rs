@@ -12,6 +12,8 @@ pub mod transcript;
 pub mod segment;
 pub mod transcribe;
 pub mod pipeline;
+pub mod diarize;
+pub use diarize::{diarize_segments, DiarSeg};
 
 pub use mode::{ModeBehavior, record_behavior};
 pub use naming::meeting_base_name;
