@@ -297,6 +297,7 @@ fn stop_meeting(app: &tauri::AppHandle) {
             cfg.meeting.vad_model.clone(),
             cfg.llm.clone(),
             cfg.meeting.effective_minutes_prompt(),
+            cfg.meeting.clean_transcript,
         ) {
             Ok(mp3) => eprintln!("会议结束,已存: {}", mp3.display()),
             Err(e) => eprintln!("会议结束处理失败: {e}"),

@@ -95,6 +95,7 @@ impl MeetingSession {
         vad_model: String,
         llm: crate::config::LlmConfig,
         minutes_prompt: String,
+        clean: bool,
     ) -> Result<PathBuf> {
         if let Some(m) = self.mic {
             m.stop()?;
@@ -131,7 +132,12 @@ impl MeetingSession {
                 &language,
                 &vad_model,
             ) {
-                Ok(t) => {
+                Ok(mut t) => {
+                    if clean && llm.enabled && !llm.base_url.trim().is_empty() {
+                        if let Ok(c) = crate::corrector::Corrector::new(llm.clone()) {
+                            super::pipeline::clean_transcript(&mut t, &c);
+                        }
+                    }
                     let json = paths.dir.join(format!("{base}.json"));
                     let _ = std::fs::write(&json, t.to_json());
                     let minutes = if llm.enabled && !llm.base_url.trim().is_empty() {

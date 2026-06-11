@@ -1,6 +1,7 @@
 use std::path::Path;
 use anyhow::{Context, Result};
 
+use crate::corrector::Corrector;
 use super::segment::{vad_segments, Segment};
 use super::transcribe::SegmentTranscriber;
 use super::transcript::{Line, Speaker, Transcript};
@@ -42,6 +43,13 @@ fn lines_for_track(
         });
     }
     Ok(lines)
+}
+
+/// 对转写逐行做 LLM 清理(就地修改 text)。
+pub fn clean_transcript(t: &mut Transcript, corrector: &Corrector) {
+    for l in &mut t.lines {
+        l.text = corrector.clean_line(&l.text);
+    }
 }
 
 /// 离线转写一场会议:mic→「我」,system→「对方」,按时间归并。
