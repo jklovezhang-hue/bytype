@@ -1,5 +1,5 @@
 //! 会议页后端:列历史会议、读单场、重新生成纪要、删除、打开文件夹。
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use serde::Serialize;
 use voice_input::config::Config;
 
@@ -8,6 +8,22 @@ fn meetings_root() -> PathBuf {
     match Config::load_resolved() {
         Ok(c) => PathBuf::from(c.meeting.output_dir),
         Err(_) => PathBuf::from("./meetings"),
+    }
+}
+
+/// 校验 base 是单一安全目录名,防路径穿越(`base` 来自 webview)。
+/// 要求:非空、不含路径分隔符、无 `..`、恰好一个路径成分。
+fn ensure_safe_base(base: &str) -> Result<(), String> {
+    let b = base.trim();
+    let ok = !b.is_empty()
+        && !b.contains('/')
+        && !b.contains('\\')
+        && !b.contains("..")
+        && Path::new(b).components().count() == 1;
+    if ok {
+        Ok(())
+    } else {
+        Err("非法的会议标识".to_string())
     }
 }
 
@@ -49,6 +65,9 @@ pub struct MeetingDetail {
 
 #[tauri::command]
 pub fn get_meeting(base: String) -> MeetingDetail {
+    if ensure_safe_base(&base).is_err() {
+        return MeetingDetail { has_json: false, has_mp3: false, base, md: String::new() };
+    }
     let dir = meetings_root().join(&base);
     let md = std::fs::read_to_string(dir.join(format!("{base}.md"))).unwrap_or_default();
     MeetingDetail {
@@ -61,6 +80,7 @@ pub fn get_meeting(base: String) -> MeetingDetail {
 
 #[tauri::command]
 pub fn regenerate_minutes(base: String) -> Result<String, String> {
+    ensure_safe_base(&base)?;
     let dir = meetings_root().join(&base);
     let json = std::fs::read_to_string(dir.join(format!("{base}.json")))
         .map_err(|_| "找不到转写数据(.json),无法重新生成".to_string())?;
@@ -87,12 +107,14 @@ pub fn regenerate_minutes(base: String) -> Result<String, String> {
 
 #[tauri::command]
 pub fn delete_meeting(base: String) -> Result<(), String> {
+    ensure_safe_base(&base)?;
     let dir = meetings_root().join(&base);
     std::fs::remove_dir_all(&dir).map_err(|e| format!("删除失败:{e}"))
 }
 
 #[tauri::command]
 pub fn open_meeting_folder(base: String) -> Result<(), String> {
+    ensure_safe_base(&base)?;
     let root = meetings_root();
     let dir = root.join(&base);
     // 该场会议目录不存在时,退回打开会议根目录(避免给 explorer 传不存在的路径 → 它会转而弹出"文档")。

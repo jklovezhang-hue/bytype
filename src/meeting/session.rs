@@ -129,7 +129,10 @@ impl MeetingSession {
             .unwrap_or_default();
         std::thread::spawn(move || {
             eprintln!("会议转写中…(可能数分钟)");
-            let success = match super::pipeline::transcribe_meeting(
+            // 用 catch_unwind 包住后台转写:即使模型加载/转写 panic,也走到下面复位 UI
+            // (on_done(false))并保留录音,不让托盘卡在"正在转录"。
+            let success = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            match super::pipeline::transcribe_meeting(
                 &base,
                 &paths.mic_wav,
                 &paths.system_wav,
@@ -182,12 +185,20 @@ impl MeetingSession {
                     eprintln!("会议转写失败(录音与 MP3 已保留):{e}");
                     false
                 }
-            };
-            for p in plan_retention(&paths, retention) {
-                let _ = std::fs::remove_file(p);
             }
-            if retention == AudioRetention::None {
-                let _ = std::fs::remove_file(&paths.mp3);
+            }))
+            .unwrap_or_else(|_| {
+                eprintln!("会议转写线程异常(panic),已保留录音与 MP3");
+                false
+            });
+            // 仅转写成功才按保留档删原始轨;失败/异常一律保留全部录音(含 MP3)以便重试或留存。
+            if success {
+                for p in plan_retention(&paths, retention) {
+                    let _ = std::fs::remove_file(p);
+                }
+                if retention == AudioRetention::None {
+                    let _ = std::fs::remove_file(&paths.mp3);
+                }
             }
             on_done(success);
         });
