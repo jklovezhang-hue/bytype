@@ -9,6 +9,7 @@ import HelpPage from "./settings/HelpPage";
 import HotkeyPage from "./settings/HotkeyPage";
 import LlmPage from "./settings/LlmPage";
 import VocabPage from "./settings/VocabPage";
+import MeetingPage from "./settings/MeetingPage";
 
 const PAGES = [
   { id: "general", icon: "⚙", label: "通用" },
@@ -16,6 +17,7 @@ const PAGES = [
   { id: "llm", icon: "✨", label: "LLM 整理" },
   { id: "vocab", icon: "📖", label: "词库" },
   { id: "style", icon: "🎯", label: "应用风格" },
+  { id: "meeting", icon: "🎙", label: "会议纪要" },
   { id: "help", icon: "❓", label: "帮助" },
   { id: "about", icon: "ℹ️", label: "关于" },
 ] as const;
@@ -118,6 +120,7 @@ export default function App() {
           {page === "llm" && <LlmPage cfg={cfg} set={set} />}
           {page === "vocab" && <VocabPage cfg={cfg} set={set} />}
           {page === "style" && <AppStylePage cfg={cfg} set={set} />}
+          {page === "meeting" && <MeetingPage />}
           {page === "help" && <HelpPage cfg={cfg} />}
           {page === "about" && <AboutPage cfgPath={cfgPath} />}
         </main>
