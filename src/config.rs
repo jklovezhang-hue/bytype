@@ -207,6 +207,8 @@ pub struct MeetingConfig {
     pub vad_model: String,
     /// 自定义纪要提示词;留空则用内置默认。
     pub minutes_prompt: String,
+    /// 是否对会议转写逐段做 LLM 清理(去语气词/纠错/标点);需 LLM 启用。
+    pub clean_transcript: bool,
 }
 
 impl Default for MeetingConfig {
@@ -220,6 +222,7 @@ impl Default for MeetingConfig {
             archive_bitrate: 48,
             vad_model: "./models/silero_vad.onnx".into(),
             minutes_prompt: String::new(),
+            clean_transcript: true,
         }
     }
 }
@@ -709,6 +712,11 @@ style = "技术"
         let cfg: Config = toml::from_str("[meeting]\naudio_retention = \"none\"\n").unwrap();
         assert_eq!(cfg.meeting.audio_retention, AudioRetention::None);
         assert_eq!(cfg.meeting.default_mode, RecordMode::MicSystem);
+    }
+
+    #[test]
+    fn meeting_clean_transcript_defaults_true() {
+        assert!(MeetingConfig::default().clean_transcript);
     }
 
     #[test]
