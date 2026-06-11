@@ -1,3 +1,4 @@
+mod meeting_cmd;
 mod settings;
 mod wizard;
 
@@ -366,7 +367,12 @@ pub fn run() {
             wizard::download_model,
             wizard::cancel_download,
             wizard::import_model,
-            finish_wizard
+            finish_wizard,
+            meeting_cmd::list_meetings,
+            meeting_cmd::get_meeting,
+            meeting_cmd::regenerate_minutes,
+            meeting_cmd::delete_meeting,
+            meeting_cmd::open_meeting_folder
         ])
         .setup(|app| {
             // 初始(空闲)托盘菜单;录制中由 refresh_tray 重建。

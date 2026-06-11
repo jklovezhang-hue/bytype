@@ -80,6 +80,11 @@ impl Transcript {
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(self).unwrap_or_else(|_| "{}".into())
     }
+
+    /// 从结构化 JSON 反序列化(供重新生成纪要时回读 `<base>.json`)。
+    pub fn from_json(s: &str) -> serde_json::Result<Transcript> {
+        serde_json::from_str(s)
+    }
 }
 
 #[cfg(test)]
