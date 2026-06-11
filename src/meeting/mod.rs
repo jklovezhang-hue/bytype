@@ -11,6 +11,7 @@ pub mod capture_system;
 pub mod transcript;
 pub mod segment;
 pub mod transcribe;
+pub mod pipeline;
 
 pub use mode::{ModeBehavior, record_behavior};
 pub use naming::meeting_base_name;
@@ -24,3 +25,4 @@ pub use capture_system::SystemCapture;
 pub use transcript::{Line, Speaker, Transcript};
 pub use segment::{vad_segments, Segment};
 pub use transcribe::SegmentTranscriber;
+pub use pipeline::transcribe_meeting;
