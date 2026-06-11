@@ -93,9 +93,12 @@ pub fn delete_meeting(base: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn open_meeting_folder(base: String) -> Result<(), String> {
-    let dir = meetings_root().join(&base);
+    let root = meetings_root();
+    let dir = root.join(&base);
+    // 该场会议目录不存在时,退回打开会议根目录(避免给 explorer 传不存在的路径 → 它会转而弹出"文档")。
+    let target = if dir.is_dir() { dir } else { root };
     std::process::Command::new("explorer")
-        .arg(dir)
+        .arg(target)
         .spawn()
         .map_err(|e| format!("打开失败:{e}"))?;
     Ok(())

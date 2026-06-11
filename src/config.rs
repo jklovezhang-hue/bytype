@@ -1,6 +1,6 @@
 //! TOML 配置。所有字段都有默认值,缺字段不报错,便于随时增减配置项。
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
@@ -418,14 +418,28 @@ impl Config {
     }
 }
 
-/// 把相对的 model_dir 解析到 base 目录;绝对路径原样返回。
+/// 把相对的 model_dir 解析到 base 目录;绝对路径原样规整。
+/// 解析后去掉路径中的 `.`(CurDir)成分 —— 默认值多为 `./xxx`,拼接后会残留 `\.\`,
+/// 文件读写能自动规整,但 explorer.exe 对 `\.\` 挑剔(打不开会转而弹出"文档"),故统一清掉。
 pub fn resolve_model_dir(base: &Path, model_dir: &str) -> String {
     let md = Path::new(model_dir);
-    if md.is_relative() {
-        base.join(md).to_string_lossy().to_string()
+    let joined = if md.is_relative() {
+        base.join(md)
     } else {
-        model_dir.to_string()
+        md.to_path_buf()
+    };
+    normalize_path(&joined).to_string_lossy().to_string()
+}
+
+/// 去掉路径中的 `.`(CurDir)成分,保留前缀/根/正常成分与 `..`;不访问文件系统。
+fn normalize_path(p: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        if c != Component::CurDir {
+            out.push(c);
+        }
     }
+    out
 }
 
 /// 解析提示音路径:空字符串保持空(用内置默认);非空相对 base 解析为绝对。
@@ -475,6 +489,16 @@ mod tests {
             resolve_model_dir(base, "C:\\abs\\models"),
             "C:\\abs\\models"
         );
+    }
+
+    #[test]
+    fn resolve_model_dir_strips_curdir_component() {
+        // 默认值 "./meetings" 拼接后不应残留 `.`(否则 explorer 打不开)。
+        let base = Path::new("C:\\Users\\me\\AppData\\Local\\ByType");
+        let r = resolve_model_dir(base, "./meetings");
+        assert!(!r.contains("\\.\\"), "解析结果不应含 `\\.\\`: {r}");
+        assert!(!r.contains("/./"), "解析结果不应含 `/./`: {r}");
+        assert!(r.ends_with("ByType\\meetings"), "应为 base 下的 meetings: {r}");
     }
 
     #[test]
