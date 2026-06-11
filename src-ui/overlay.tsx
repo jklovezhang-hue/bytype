@@ -29,6 +29,9 @@ function Pill() {
   const [mNote, setMNote] = useState<string | null>(null);
   const mTick = useRef<number | null>(null);
   const noteT = useRef<number | null>(null);
+  // 同步镜像会议状态:bt:state 监听器在 useEffect([]) 里只建一次,闭包会捕获到过期的
+  // meeting,故用 ref 让 finishWithFade 等回调读到实时值(会议进行中绝不隐藏共用浮窗)。
+  const meetingRef = useRef(false);
   const stopMTick = () => {
     if (mTick.current !== null) {
       clearInterval(mTick.current);
@@ -56,7 +59,9 @@ function Pill() {
     hideT.current = window.setTimeout(() => {
       setLeaving(true);
       hideT.current = window.setTimeout(() => {
-        getCurrentWindow().hide();
+        // 会议进行中绝不隐藏窗口(听写与会议共用同一浮窗);只复位听写状态,
+        // 渲染会自动回落到会议药丸(其计时由 mTick 后台持续,不受影响)。
+        if (!meetingRef.current) getCurrentWindow().hide();
         setPhase("idle");
         setLeaving(false);
         setSecs(0);
@@ -109,9 +114,11 @@ function Pill() {
           () => setMSecs(Math.floor((Date.now() - start) / 1000)),
           250
         );
+        meetingRef.current = true;
         setMeeting(true);
       } else if (e.payload === "done" || e.payload === "failed") {
         stopMTick();
+        meetingRef.current = false;
         setMeeting(false);
         setMSecs(0);
         setMNote(e.payload === "done" ? "✅ 会议纪要已就绪" : "✕ 会议处理失败");
@@ -123,6 +130,7 @@ function Pill() {
       } else {
         // "stopped"
         stopMTick();
+        meetingRef.current = false;
         setMeeting(false);
         setMSecs(0);
       }
@@ -143,8 +151,21 @@ function Pill() {
     finishWithFade(0);
   };
 
-  // 会议录制优先于听写显示。
-  if (meeting) {
+  // 会议转写完成/失败的短暂提示(会议确已结束,优先)。
+  if (mNote) {
+    return (
+      <div className="pill show" title="会议纪要">
+        <span className="time" style={{ fontSize: 13, whiteSpace: "nowrap" }}>{mNote}</span>
+      </div>
+    );
+  }
+
+  // 听写正在进行(录音/处理)时显示听写药丸 —— 即使会议在录制中也临时让位给它,
+  // 给出听写反馈;会议计时在后台(mTick)持续不受影响,听写结束后自动回到会议药丸。
+  const dictating = phase === "recording" || phase === "processing";
+
+  // 会议录制中且当前无听写活动:显示会议药丸(持续计时)。
+  if (meeting && !dictating) {
     return (
       <div className="pill show" title="会议录制中(结束请用托盘菜单)">
         <span className="left">
@@ -165,16 +186,7 @@ function Pill() {
     );
   }
 
-  // 会议转写完成/失败的短暂提示。
-  if (mNote) {
-    return (
-      <div className="pill show" title="会议纪要">
-        <span className="time" style={{ fontSize: 13, whiteSpace: "nowrap" }}>{mNote}</span>
-      </div>
-    );
-  }
-
-  const show = phase !== "idle" && !leaving;
+  const show = dictating || (phase !== "idle" && !leaving);
 
   return (
     <div className={`pill ${show ? "show" : ""}`} onClick={onClick} title="点击取消">

@@ -107,19 +107,47 @@ impl Corrector {
         }
     }
 
+    /// 发一次 chat/completions;对**瞬时**错误(连接/超时/发送失败、5xx 服务端错误)做指数退避重试。
+    /// 会议转写会在后台连发多段清理请求,relay 偶发丢连接("error sending request")会导致该段
+    /// 回退原文(错字/语气词残留),重试可显著降低这种漏清理。4xx 与响应解析错误不重试。
     fn try_chat(&self, system_prompt: &str, user_text: &str) -> anyhow::Result<String> {
         let url = format!("{}/chat/completions", self.cfg.base_url.trim_end_matches('/'));
         let body = build_request_body(&self.cfg, system_prompt, user_text);
-        let resp = self
-            .client
-            .post(&url)
-            .bearer_auth(&self.cfg.api_key)
-            .json(&body)
-            .send()?
-            .error_for_status()?;
-        let value: Value = resp.json()?;
-        parse_response(&value)
-            .ok_or_else(|| anyhow::anyhow!("响应缺少 choices[0].message.content"))
+        let mut attempt = 0u32;
+        loop {
+            let resp = match self
+                .client
+                .post(&url)
+                .bearer_auth(&self.cfg.api_key)
+                .json(&body)
+                .send()
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    if (e.is_connect() || e.is_timeout() || e.is_request()) && attempt < 2 {
+                        std::thread::sleep(Duration::from_millis(300 * (1 << attempt)));
+                        attempt += 1;
+                        continue;
+                    }
+                    return Err(e.into());
+                }
+            };
+            let resp = match resp.error_for_status() {
+                Ok(r) => r,
+                Err(e) => {
+                    // 5xx 服务端错误可重试;4xx(鉴权/参数)直接失败。
+                    if e.status().map(|s| s.is_server_error()).unwrap_or(false) && attempt < 2 {
+                        std::thread::sleep(Duration::from_millis(300 * (1 << attempt)));
+                        attempt += 1;
+                        continue;
+                    }
+                    return Err(e.into());
+                }
+            };
+            let value: Value = resp.json()?;
+            return parse_response(&value)
+                .ok_or_else(|| anyhow::anyhow!("响应缺少 choices[0].message.content"));
+        }
     }
 }
 
