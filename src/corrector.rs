@@ -29,6 +29,17 @@ impl Corrector {
         self.process(raw, &sys)
     }
 
+    /// 总结模式:用「summary」预设把口述内容去语气词、纠错后提炼成简洁、通顺的结果。
+    /// `style` 为可选的应用风格指令。失败/禁用/过短回退原文。
+    pub fn summarize(&self, raw: &str, style: Option<&str>) -> String {
+        let sys = compose_system_prompt(
+            &crate::config::preset_prompt("summary"),
+            self.cfg.vocabulary_line().as_deref(),
+            style,
+        );
+        self.process(raw, &sys)
+    }
+
     /// 翻译成英文。`style` 为可选的应用风格指令。失败回退原文。
     pub fn translate(&self, raw: &str, style: Option<&str>) -> String {
         let sys = compose_system_prompt(
@@ -327,5 +338,13 @@ mod tests {
         c.enabled = false;
         let corrector = Corrector::new(c).unwrap();
         assert_eq!(corrector.clean_line("嗯那个文本啊"), "嗯那个文本啊");
+    }
+
+    #[test]
+    fn summarize_disabled_returns_raw() {
+        let mut c = cfg();
+        c.enabled = false;
+        let corrector = Corrector::new(c).unwrap();
+        assert_eq!(corrector.summarize("一段很长的口述内容", None), "一段很长的口述内容");
     }
 }

@@ -88,7 +88,7 @@ pub fn run_with(config: Config, observer: Arc<dyn EngineObserver>) -> anyhow::Re
     let mut transcriber = Transcriber::load(&config.asr.model_dir, &config.asr.language)?;
     let corrector = Corrector::new(config.llm.clone())?;
     println!(
-        "ByType 引擎就绪。{}=识别整理;{}+{}=翻译英文;{}+{}=对选中文字执行语音命令。",
+        "ByType 引擎就绪。{}=识别整理;{}+{}=中英互译;{}+{}=对选中文字执行命令(未选中则总结口述)。",
         config.hotkey.primary,
         config.hotkey.primary,
         config.hotkey.translate_modifier,
@@ -201,7 +201,11 @@ fn handle_command(corrector: &Corrector, instruction: &str) -> anyhow::Result<()
         }
     };
     if selected.trim().is_empty() {
-        let text = corrector.correct(instruction, None);
+        // 未选中文字:把口述内容总结输出(去语气词 + 纠错 + 提炼)。
+        let text = corrector.summarize(instruction, None);
+        if text != instruction {
+            println!("总结: {text}");
+        }
         inject_text(&text)?;
         return Ok(());
     }
