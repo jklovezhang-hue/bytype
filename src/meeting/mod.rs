@@ -10,6 +10,7 @@ pub mod capture_mic;
 pub mod capture_system;
 pub mod transcript;
 pub mod segment;
+pub mod transcribe;
 
 pub use mode::{ModeBehavior, record_behavior};
 pub use naming::meeting_base_name;
@@ -22,3 +23,4 @@ pub use capture_mic::MicCapture;
 pub use capture_system::SystemCapture;
 pub use transcript::{Line, Speaker, Transcript};
 pub use segment::{vad_segments, Segment};
+pub use transcribe::SegmentTranscriber;
