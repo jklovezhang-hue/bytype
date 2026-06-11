@@ -203,6 +203,8 @@ pub struct MeetingConfig {
     pub audio_retention_days: u32,
     /// 存档 MP3 比特率(kbps,单声道)。
     pub archive_bitrate: u32,
+    /// Silero VAD 模型路径(相对路径按 resolve 规则解析)。
+    pub vad_model: String,
 }
 
 impl Default for MeetingConfig {
@@ -214,6 +216,7 @@ impl Default for MeetingConfig {
             audio_retention: AudioRetention::Mixed,
             audio_retention_days: 7,
             archive_bitrate: 48,
+            vad_model: "./models/silero_vad.onnx".into(),
         }
     }
 }
@@ -646,6 +649,12 @@ style = "技术"
         let text = toml::to_string_pretty(&cfg).unwrap();
         let back: Config = toml::from_str(&text).unwrap();
         assert_eq!(back, cfg);
+    }
+
+    #[test]
+    fn meeting_config_has_vad_model_default() {
+        let m = MeetingConfig::default();
+        assert_eq!(m.vad_model, "./models/silero_vad.onnx");
     }
 
     #[test]
