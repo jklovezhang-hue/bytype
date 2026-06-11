@@ -2,6 +2,7 @@
 //! 命令行 bin 与 Tauri 应用共用此入口。
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{thread, time::Duration};
 
 use arboard::Clipboard;
@@ -43,12 +44,22 @@ impl EngineObserver for NoopObserver {}
 /// 交给 GUI 的取消句柄:内含动作发送端克隆,可从外部注入"取消录音"。
 pub struct ControlHandle {
     tx: Sender<HotkeyAction>,
+    dictation_suspended: Arc<AtomicBool>,
 }
 
 impl ControlHandle {
     /// 请求取消当前录音(等价于按 Esc / 点药丸)。
     pub fn cancel(&self) {
         let _ = self.tx.send(HotkeyAction::CancelRecording);
+    }
+    /// 设置是否挂起听写(会议用麦期间置位)。
+    pub fn set_dictation_suspended(&self, on: bool) {
+        self.dictation_suspended.store(on, Ordering::SeqCst);
+    }
+    /// 仅测试用构造。
+    #[cfg(test)]
+    pub fn new_for_test(tx: Sender<HotkeyAction>, flag: Arc<AtomicBool>) -> ControlHandle {
+        ControlHandle { tx, dictation_suspended: flag }
     }
 }
 
@@ -86,7 +97,8 @@ pub fn run_with(config: Config, observer: Arc<dyn EngineObserver>) -> anyhow::Re
     );
 
     let (tx, rx) = unbounded::<HotkeyAction>();
-    observer.on_ready(ControlHandle { tx: tx.clone() });
+    let dictation_suspended = Arc::new(AtomicBool::new(false));
+    observer.on_ready(ControlHandle { tx: tx.clone(), dictation_suspended: dictation_suspended.clone() });
     thread::spawn(move || {
         if let Err(e) = hotkey::run(tx, primary, mod_a, mod_b) {
             eprintln!("钩子线程退出: {e}");
@@ -101,19 +113,24 @@ pub fn run_with(config: Config, observer: Arc<dyn EngineObserver>) -> anyhow::Re
     let mut recorder: Option<Recorder> = None;
     for action in rx.iter() {
         match action {
-            HotkeyAction::StartRecording => match Recorder::start() {
-                Ok(r) => {
-                    recorder = Some(r);
-                    if let Some(p) = &player {
-                        p.play_start();
+            HotkeyAction::StartRecording => {
+                if dictation_suspended.load(Ordering::SeqCst) {
+                    continue; // 会议占麦期间,忽略听写开始
+                }
+                match Recorder::start() {
+                    Ok(r) => {
+                        recorder = Some(r);
+                        if let Some(p) = &player {
+                            p.play_start();
+                        }
+                        observer.on_state(OverlayState::Recording);
                     }
-                    observer.on_state(OverlayState::Recording);
+                    Err(e) => {
+                        eprintln!("录音启动失败: {e}");
+                        observer.on_state(OverlayState::Failed);
+                    }
                 }
-                Err(e) => {
-                    eprintln!("录音启动失败: {e}");
-                    observer.on_state(OverlayState::Failed);
-                }
-            },
+            }
             HotkeyAction::CancelRecording | HotkeyAction::DiscardRecording => {
                 // 仅当确有进行中的录音才通知取消;否则(如迟到的取消、空取消)
                 // 静默忽略,避免在 Done 之后再发一个多余的 Cancelled。
@@ -236,6 +253,20 @@ fn copy_selection() -> anyhow::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn control_handle_toggles_dictation_suspend() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let flag = Arc::new(AtomicBool::new(false));
+        let (tx, _rx) = crossbeam_channel::unbounded();
+        let h = ControlHandle::new_for_test(tx, flag.clone());
+        assert!(!flag.load(Ordering::SeqCst));
+        h.set_dictation_suspended(true);
+        assert!(flag.load(Ordering::SeqCst));
+        h.set_dictation_suspended(false);
+        assert!(!flag.load(Ordering::SeqCst));
+    }
 
     #[test]
     fn bottom_center_centers_horizontally_and_offsets_bottom() {
