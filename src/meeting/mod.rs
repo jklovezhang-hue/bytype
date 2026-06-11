@@ -2,7 +2,9 @@
 pub mod mode;
 pub mod naming;
 pub mod resample;
+pub mod mix;
 
 pub use mode::{ModeBehavior, record_behavior};
 pub use naming::meeting_base_name;
 pub use resample::resample_to_16k;
+pub use mix::mix_tracks;
