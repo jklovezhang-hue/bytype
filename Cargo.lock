@@ -5509,6 +5509,7 @@ dependencies = [
  "chrono",
  "cpal",
  "crossbeam-channel",
+ "dirs 5.0.1",
  "hound",
  "image",
  "mp3lame-encoder",

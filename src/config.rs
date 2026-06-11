@@ -220,7 +220,8 @@ pub struct MeetingConfig {
 impl Default for MeetingConfig {
     fn default() -> Self {
         MeetingConfig {
-            output_dir: "./meetings".into(),
+            // 空 = 用系统「文档/ByType/会议」(见 resolve_meeting_output_dir);非空则按配置。
+            output_dir: String::new(),
             default_mode: RecordMode::MicSystem,
             diarization: true,
             audio_retention: AudioRetention::Mixed,
@@ -411,7 +412,7 @@ impl Config {
         cfg.sound.start_sound = resolve_sound_path(&base, &cfg.sound.start_sound);
         cfg.sound.end_sound = resolve_sound_path(&base, &cfg.sound.end_sound);
         cfg.meeting.vad_model = resolve_model_dir(&base, &cfg.meeting.vad_model);
-        cfg.meeting.output_dir = resolve_model_dir(&base, &cfg.meeting.output_dir);
+        cfg.meeting.output_dir = resolve_meeting_output_dir(&base, &cfg.meeting.output_dir);
         cfg.meeting.segmentation_model = resolve_model_dir(&base, &cfg.meeting.segmentation_model);
         cfg.meeting.embedding_model = resolve_model_dir(&base, &cfg.meeting.embedding_model);
         Ok(cfg)
@@ -429,6 +430,19 @@ pub fn resolve_model_dir(base: &Path, model_dir: &str) -> String {
         md.to_path_buf()
     };
     normalize_path(&joined).to_string_lossy().to_string()
+}
+
+/// 会议输出根目录:配置非空则按配置解析(相对则相对 config 目录);
+/// 配置为空(默认)时用系统「文档/ByType/会议」—— 文档目录好找,且 `dirs` 会正确处理
+/// OneDrive 等重定向;取不到文档目录时退回 config 所在目录下的 `会议`。
+pub fn resolve_meeting_output_dir(base: &Path, configured: &str) -> String {
+    if !configured.trim().is_empty() {
+        return resolve_model_dir(base, configured);
+    }
+    let docs = dirs::document_dir().unwrap_or_else(|| base.to_path_buf());
+    normalize_path(&docs.join("ByType").join("会议"))
+        .to_string_lossy()
+        .to_string()
 }
 
 /// 去掉路径中的 `.`(CurDir)成分,保留前缀/根/正常成分与 `..`;不访问文件系统。
@@ -489,6 +503,25 @@ mod tests {
             resolve_model_dir(base, "C:\\abs\\models"),
             "C:\\abs\\models"
         );
+    }
+
+    #[test]
+    fn meeting_output_dir_empty_uses_documents_subdir() {
+        // 空配置 → 文档目录下的 ByType\会议(末尾段稳定,文档目录因机器而异)。
+        let base = Path::new("C:\\cfg");
+        let r = resolve_meeting_output_dir(base, "");
+        assert!(r.ends_with("ByType\\会议") || r.ends_with("ByType/会议"), "{r}");
+        assert!(!r.contains("\\.\\"), "{r}");
+    }
+
+    #[test]
+    fn meeting_output_dir_honors_explicit_config() {
+        // 显式配置仍生效(相对则相对 config 目录)。
+        let base = Path::new("C:\\cfg");
+        let r = resolve_meeting_output_dir(base, "./meetings");
+        assert!(r.ends_with("cfg\\meetings"), "{r}");
+        let abs = resolve_meeting_output_dir(base, "D:\\my\\mtg");
+        assert_eq!(abs, "D:\\my\\mtg");
     }
 
     #[test]
@@ -735,7 +768,7 @@ style = "技术"
     #[test]
     fn meeting_config_defaults() {
         let m = MeetingConfig::default();
-        assert_eq!(m.output_dir, "./meetings");
+        assert_eq!(m.output_dir, ""); // 空 = 运行时解析到「文档/ByType/会议」
         assert_eq!(m.default_mode, RecordMode::MicSystem);
         assert!(m.diarization);
         assert_eq!(m.audio_retention, AudioRetention::Mixed);

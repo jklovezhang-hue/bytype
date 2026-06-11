@@ -28,6 +28,7 @@ hound = "3"
 wasapi = "0.15"
 mp3lame-encoder = "0.2"
 chrono = "0.4"
+dirs = "5"
 
 [dependencies.windows]
 version = "0.58"

@@ -51,3 +51,14 @@ end_sound = ""
 # 语音识别模型下载源(首启向导用;留空走内置默认 hf-mirror 镜像)。下载的 int8 模型存为 model.onnx。
 model_url  = "https://hf-mirror.com/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/model.int8.onnx"
 tokens_url = "https://hf-mirror.com/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/tokens.txt"
+
+[meeting]
+# 会议录音(MP3)与纪要(MD)的存放根目录。留空 = 系统「文档/ByType/会议」(好找;
+# 注意若文档在 OneDrive 下会被同步上云)。填路径(相对 config 目录或绝对)可改到别处,
+# 例如想留本地不上云可设为 "C:/Users/你/ByType/会议"。
+output_dir = ""
+default_mode = "mic_system"   # mic_system / system / mic(开始会议时仍可在托盘临时选择)
+diarization = true            # 区分对方多位说话人(声纹;仅录到系统声音时生效)
+clean_transcript = true       # 用 LLM 清理口语词与错别字
+audio_retention = "mixed"     # mixed=只留合并 MP3 / tracks=另留双轨 WAV / none=不留音频
+archive_bitrate = 48          # 存档 MP3 码率(kbps)
