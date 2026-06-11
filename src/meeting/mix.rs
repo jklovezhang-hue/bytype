@@ -52,7 +52,8 @@ mod tests {
         let b = vec![20000i16];
         let out = mix_tracks(&[a, b]);
         assert_eq!(out.len(), 1);
-        assert!(out[0] <= 32767 && out[0] >= 32000, "got {}", out[0]);
+        // 30000+20000=50000 超 i16,缩放后应贴近满幅(i16::MAX 上限恒成立,只断言下界)。
+        assert!(out[0] >= 32000, "got {}", out[0]);
     }
 
     #[test]
