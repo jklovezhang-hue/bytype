@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{Menu, MenuItem, Submenu},
     tray::TrayIconBuilder,
     Emitter, Manager, PhysicalPosition, State, WebviewWindow, WindowEvent,
 };
@@ -26,6 +26,10 @@ struct ControlSlot(Mutex<Option<ControlHandle>>);
 /// 引擎是否已启动(防止 setup 与 finish_wizard 重复启动钩子/录音器)。
 #[derive(Default)]
 struct EngineStarted(AtomicBool);
+
+/// 进行中的会议(None = 空闲)。
+#[derive(Default)]
+struct MeetingSlot(Mutex<Option<voice_input::meeting::MeetingSession>>);
 
 /// 前端点药丸时调用:请求取消当前录音(跳过 LLM)。
 #[tauri::command]
@@ -162,6 +166,70 @@ fn start_engine(app: &tauri::AppHandle) {
     }
 }
 
+/// 托盘「开始会议」:按所选模式建会议、起采集,并按需挂起听写。
+fn start_meeting(app: &tauri::AppHandle, mode: voice_input::config::RecordMode) {
+    let cfg = match Config::load_resolved() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("会议:加载配置失败 {e}");
+            return;
+        }
+    };
+    let root = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join(cfg.meeting.output_dir.trim_start_matches("./"));
+    match voice_input::meeting::MeetingSession::start(mode, &root) {
+        Ok(sess) => {
+            if voice_input::meeting::record_behavior(mode).suspend_dictation {
+                if let Some(c) = app
+                    .state::<ControlSlot>()
+                    .0
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .as_ref()
+                {
+                    c.set_dictation_suspended(true);
+                }
+            }
+            app.state::<MeetingSlot>()
+                .0
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .replace(sess);
+            eprintln!("会议已开始: {mode:?}");
+        }
+        Err(e) => eprintln!("会议启动失败: {e}"),
+    }
+}
+
+/// 托盘「结束会议」:停采集 → 混音 → MP3 → 留删,并恢复听写。
+fn stop_meeting(app: &tauri::AppHandle) {
+    let cfg = Config::load_resolved().unwrap_or_default();
+    let sess = app
+        .state::<MeetingSlot>()
+        .0
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .take();
+    if let Some(c) = app
+        .state::<ControlSlot>()
+        .0
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .as_ref()
+    {
+        c.set_dictation_suspended(false);
+    }
+    if let Some(sess) = sess {
+        match sess.stop(cfg.meeting.audio_retention, cfg.meeting.archive_bitrate) {
+            Ok(mp3) => eprintln!("会议结束,已存: {}", mp3.display()),
+            Err(e) => eprintln!("会议结束处理失败: {e}"),
+        }
+    }
+}
+
 /// 向导「完成」:用向导填的 LLM 值更新(或创建)config.toml,然后当场启动引擎。
 #[tauri::command]
 fn finish_wizard(
@@ -211,6 +279,7 @@ pub fn run() {
         .manage(ControlSlot::default())
         .manage(wizard::DownloadCancel::default())
         .manage(EngineStarted::default())
+        .manage(MeetingSlot::default())
         .invoke_handler(tauri::generate_handler![
             cancel_recording,
             settings::get_config,
@@ -227,14 +296,27 @@ pub fn run() {
             finish_wizard
         ])
         .setup(|app| {
+            let m_mic_sys =
+                MenuItem::with_id(app, "meet_mic_sys", "麦克风+系统声音", true, None::<&str>)?;
+            let m_sys = MenuItem::with_id(app, "meet_sys", "只录系统声音", true, None::<&str>)?;
+            let m_mic = MenuItem::with_id(app, "meet_mic", "只录麦克风", true, None::<&str>)?;
+            let start_meet =
+                Submenu::with_items(app, "开始会议", true, &[&m_mic_sys, &m_sys, &m_mic])?;
+            let stop_meet = MenuItem::with_id(app, "meet_stop", "结束会议", true, None::<&str>)?;
             let settings = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&settings, &quit])?;
+            let menu = Menu::with_items(app, &[&start_meet, &stop_meet, &settings, &quit])?;
             let _tray = TrayIconBuilder::with_id("main")
                 .tooltip("ByType")
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
+                    "meet_mic_sys" => {
+                        start_meeting(app, voice_input::config::RecordMode::MicSystem)
+                    }
+                    "meet_sys" => start_meeting(app, voice_input::config::RecordMode::System),
+                    "meet_mic" => start_meeting(app, voice_input::config::RecordMode::Mic),
+                    "meet_stop" => stop_meeting(app),
                     "settings" => {
                         if let Some(w) = app.get_webview_window("main") {
                             let _ = w.show();
