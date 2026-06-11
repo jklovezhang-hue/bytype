@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Sender, TryRecvError};
 use std::thread::JoinHandle;
+use std::time::Instant;
 use anyhow::{anyhow, Result};
 use wasapi::{
     get_default_device, initialize_mta, Direction, SampleType, ShareMode,
@@ -90,6 +91,10 @@ impl SystemCapture {
                 let _ = ready_inner.send(Ok(()));
 
                 let mut byte_queue: VecDeque<u8> = VecDeque::new();
+                // 以流启动为零点,按真实流逝时间给系统轨补静音,保持与麦克风轨/真实时长对齐。
+                // loopback 在无声音时不产数据,不补零会导致两轨错位 → 合并后人声/系统声相互延迟。
+                let t0 = Instant::now();
+                let mut written: u64 = 0;
                 loop {
                     // 检查停止信号。
                     match stop_rx.try_recv() {
@@ -109,7 +114,15 @@ impl SystemCapture {
                             let bytes: Vec<u8> = byte_queue.drain(..whole).collect();
                             let mono = decode_to_mono(&bytes, bits, &sample_type, channels);
                             let r = resample_to_16k(&mono, src_rate);
+                            // 先补齐到「此刻」之前缺的静音,再写本批(本批音频对应到此刻)。
+                            let target = (t0.elapsed().as_secs_f64() * 16000.0) as u64;
+                            let pad = target.saturating_sub(written + r.len() as u64);
+                            if pad > 0 {
+                                sink.append_f32(&vec![0.0; pad as usize]);
+                                written += pad;
+                            }
                             sink.append_f32(&r);
+                            written += r.len() as u64;
                         }
                     }
 
@@ -117,6 +130,12 @@ impl SystemCapture {
                     let _ = h_event.wait_for_event(200);
                 }
 
+                // 补齐尾部静音,使系统轨总时长≈真实时长(与麦克风轨对齐)。
+                let final_target = (t0.elapsed().as_secs_f64() * 16000.0) as u64;
+                let pad = final_target.saturating_sub(written);
+                if pad > 0 {
+                    sink.append_f32(&vec![0.0; pad as usize]);
+                }
                 let _ = audio_client.stop_stream();
                 sink.finalize()?;
                 Ok(())
