@@ -6,12 +6,32 @@ import { invoke } from "@tauri-apps/api/core";
 
 type Phase = "idle" | "recording" | "processing" | "done" | "cancelled" | "failed";
 
+/** 秒数格式化:>=1 小时显示 H:MM:SS,否则 MM:SS。 */
+function fmtClock(s: number): string {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
+}
+
 function Pill() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [secs, setSecs] = useState(0);
   const [leaving, setLeaving] = useState(false);
   const tick = useRef<number | null>(null);
   const hideT = useRef<number | null>(null);
+
+  // 会议录制中状态(独立于听写;录制期间优先显示会议药丸 + 时分秒计时)。
+  const [meeting, setMeeting] = useState(false);
+  const [mSecs, setMSecs] = useState(0);
+  const mTick = useRef<number | null>(null);
+  const stopMTick = () => {
+    if (mTick.current !== null) {
+      clearInterval(mTick.current);
+      mTick.current = null;
+    }
+  };
 
   const stopTick = () => {
     if (tick.current !== null) {
@@ -73,18 +93,60 @@ function Pill() {
         finishWithFade(0);
       }
     });
+    // 会议录制中:整场显示一个计时药丸(时分秒),由后端 start/stop 驱动。
+    const unMeeting = listen<string>("bt:meeting", (e) => {
+      if (e.payload === "recording") {
+        stopMTick();
+        setMSecs(0);
+        const start = Date.now();
+        mTick.current = window.setInterval(
+          () => setMSecs(Math.floor((Date.now() - start) / 1000)),
+          250
+        );
+        setMeeting(true);
+      } else {
+        stopMTick();
+        setMeeting(false);
+        setMSecs(0);
+      }
+    });
+
     return () => {
       un.then((f) => f());
+      unMeeting.then((f) => f());
     };
   }, []);
 
   const onClick = () => {
+    if (meeting) return; // 会议药丸不响应点击取消(结束会议走托盘)
     if (phase !== "recording") return;
     stopTick();
     setPhase("cancelled");
     invoke("cancel_recording").catch(() => {});
     finishWithFade(0);
   };
+
+  // 会议录制优先于听写显示。
+  if (meeting) {
+    return (
+      <div className="pill show" title="会议录制中(结束请用托盘菜单)">
+        <span className="left">
+          <span
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: "50%",
+              background: "#ff3b30",
+              display: "inline-block",
+              animation: "btblink 1.2s ease-in-out infinite",
+            }}
+          />
+        </span>
+        <span className="time">{fmtClock(mSecs)}</span>
+        <style>{`@keyframes btblink{0%,100%{opacity:1}50%{opacity:.25}}`}</style>
+      </div>
+    );
+  }
 
   const show = phase !== "idle" && !leaving;
 

@@ -166,6 +166,70 @@ fn start_engine(app: &tauri::AppHandle) {
     }
 }
 
+/// 录音模式的中文短标签(托盘「录制中」用)。
+fn mode_label(mode: voice_input::config::RecordMode) -> &'static str {
+    use voice_input::config::RecordMode::*;
+    match mode {
+        MicSystem => "麦克风+系统",
+        System => "系统声音",
+        Mic => "麦克风",
+    }
+}
+
+/// 按状态构建托盘菜单:空闲=可开始会议;录制中=显示「录制中:模式」+结束会议。
+fn build_tray_menu(
+    app: &tauri::AppHandle,
+    recording: bool,
+    label: Option<&str>,
+) -> tauri::Result<Menu<tauri::Wry>> {
+    let settings = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    if recording {
+        let status = MenuItem::with_id(
+            app,
+            "meet_status",
+            format!("● 录制中:{}", label.unwrap_or("")),
+            false, // 禁用,仅作状态标签
+            None::<&str>,
+        )?;
+        let stop_meet = MenuItem::with_id(app, "meet_stop", "结束会议", true, None::<&str>)?;
+        Menu::with_items(app, &[&status, &stop_meet, &settings, &quit])
+    } else {
+        let m_mic_sys =
+            MenuItem::with_id(app, "meet_mic_sys", "麦克风+系统声音", true, None::<&str>)?;
+        let m_sys = MenuItem::with_id(app, "meet_sys", "只录系统声音", true, None::<&str>)?;
+        let m_mic = MenuItem::with_id(app, "meet_mic", "只录麦克风", true, None::<&str>)?;
+        let start_meet =
+            Submenu::with_items(app, "开始会议", true, &[&m_mic_sys, &m_sys, &m_mic])?;
+        Menu::with_items(app, &[&start_meet, &settings, &quit])
+    }
+}
+
+/// 重建托盘菜单 + tooltip,反映会议录制状态。
+fn refresh_tray(app: &tauri::AppHandle, recording: bool, label: Option<&str>) {
+    if let Some(tray) = app.tray_by_id("main") {
+        if let Ok(menu) = build_tray_menu(app, recording, label) {
+            let _ = tray.set_menu(Some(menu));
+        }
+        let _ = tray.set_tooltip(Some(if recording { "ByType · 录制中" } else { "ByType" }));
+    }
+}
+
+/// 显示/隐藏会议录制浮窗(复用 overlay 窗口,emit bt:meeting 驱动时分秒计时)。
+fn show_meeting_overlay(app: &tauri::AppHandle, on: bool) {
+    if let Some(w) = app.get_webview_window("overlay") {
+        if on {
+            position_bottom_center(&w);
+            let _ = w.show();
+            raise_topmost(&w);
+            let _ = app.emit_to("overlay", "bt:meeting", "recording");
+        } else {
+            let _ = app.emit_to("overlay", "bt:meeting", "stopped");
+            let _ = w.hide();
+        }
+    }
+}
+
 /// 托盘「开始会议」:按所选模式建会议、起采集,并按需挂起听写。
 fn start_meeting(app: &tauri::AppHandle, mode: voice_input::config::RecordMode) {
     let cfg = match Config::load_resolved() {
@@ -199,6 +263,8 @@ fn start_meeting(app: &tauri::AppHandle, mode: voice_input::config::RecordMode) 
                 .unwrap_or_else(|p| p.into_inner())
                 .replace(sess);
             eprintln!("会议已开始: {mode:?}");
+            show_meeting_overlay(app, true);
+            refresh_tray(app, true, Some(mode_label(mode)));
         }
         Err(e) => eprintln!("会议启动失败: {e}"),
     }
@@ -222,6 +288,9 @@ fn stop_meeting(app: &tauri::AppHandle) {
     {
         c.set_dictation_suspended(false);
     }
+    // 先即时收起浮窗、恢复托盘(stop 处理可能编码 MP3 耗时一会儿)。
+    show_meeting_overlay(app, false);
+    refresh_tray(app, false, None);
     if let Some(sess) = sess {
         match sess.stop(cfg.meeting.audio_retention, cfg.meeting.archive_bitrate) {
             Ok(mp3) => eprintln!("会议结束,已存: {}", mp3.display()),
@@ -296,16 +365,8 @@ pub fn run() {
             finish_wizard
         ])
         .setup(|app| {
-            let m_mic_sys =
-                MenuItem::with_id(app, "meet_mic_sys", "麦克风+系统声音", true, None::<&str>)?;
-            let m_sys = MenuItem::with_id(app, "meet_sys", "只录系统声音", true, None::<&str>)?;
-            let m_mic = MenuItem::with_id(app, "meet_mic", "只录麦克风", true, None::<&str>)?;
-            let start_meet =
-                Submenu::with_items(app, "开始会议", true, &[&m_mic_sys, &m_sys, &m_mic])?;
-            let stop_meet = MenuItem::with_id(app, "meet_stop", "结束会议", true, None::<&str>)?;
-            let settings = MenuItem::with_id(app, "settings", "设置", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&start_meet, &stop_meet, &settings, &quit])?;
+            // 初始(空闲)托盘菜单;录制中由 refresh_tray 重建。
+            let menu = build_tray_menu(app.handle(), false, None)?;
             let _tray = TrayIconBuilder::with_id("main")
                 .tooltip("ByType")
                 .icon(app.default_window_icon().unwrap().clone())
