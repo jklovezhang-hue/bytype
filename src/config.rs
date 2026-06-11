@@ -369,14 +369,15 @@ impl Config {
         Ok(())
     }
 
-    /// 不依赖工作目录地加载:查找 config.toml,并把相对的 `asr.model_dir`
-    /// 与提示音路径解析到 config 所在目录,得到绝对路径。
+    /// 不依赖工作目录地加载:查找 config.toml,并把相对的 `asr.model_dir`、
+    /// 提示音路径、`meeting.vad_model` 解析到 config 所在目录,得到绝对路径。
     pub fn load_resolved() -> anyhow::Result<Config> {
         let (mut cfg, path) = Config::load_raw()?;
         let base = path.parent().unwrap_or(Path::new(".")).to_path_buf();
         cfg.asr.model_dir = resolve_model_dir(&base, &cfg.asr.model_dir);
         cfg.sound.start_sound = resolve_sound_path(&base, &cfg.sound.start_sound);
         cfg.sound.end_sound = resolve_sound_path(&base, &cfg.sound.end_sound);
+        cfg.meeting.vad_model = resolve_model_dir(&base, &cfg.meeting.vad_model);
         Ok(cfg)
     }
 }
