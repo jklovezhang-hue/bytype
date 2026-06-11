@@ -124,6 +124,28 @@ pub fn test_connection(cfg: &LlmConfig) -> anyhow::Result<(u64, String)> {
     Ok((start.elapsed().as_millis() as u64, reply))
 }
 
+/// 生成会议纪要:用 [llm] 配置 + 给定纪要提示词,把整段转写作为用户消息发给 LLM。
+/// 超时取 max(120, timeout_secs)。失败返回 Err。不受 enabled/skip 影响。
+pub fn generate_minutes(cfg: &LlmConfig, prompt: &str, content: &str) -> anyhow::Result<String> {
+    if cfg.base_url.trim().is_empty() {
+        anyhow::bail!("未配置 LLM 接口地址");
+    }
+    let secs = cfg.timeout_secs.max(120);
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(secs))
+        .build()?;
+    let url = format!("{}/chat/completions", cfg.base_url.trim_end_matches('/'));
+    let body = build_request_body(cfg, prompt, content);
+    let resp = client
+        .post(&url)
+        .bearer_auth(&cfg.api_key)
+        .json(&body)
+        .send()?
+        .error_for_status()?;
+    let value: Value = resp.json()?;
+    parse_response(&value).ok_or_else(|| anyhow::anyhow!("响应缺少 choices[0].message.content"))
+}
+
 /// 把词库行、应用风格依次拼到基础系统提示词后面(空项跳过)。
 pub fn compose_system_prompt(
     base: &str,
