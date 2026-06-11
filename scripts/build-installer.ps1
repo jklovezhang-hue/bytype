@@ -53,7 +53,8 @@ Write-Host "[3/3] npm run tauri build ..." -ForegroundColor Cyan
 npm run tauri build
 if ($LASTEXITCODE -ne 0) { throw "tauri build failed (exit=$LASTEXITCODE)" }
 
+# 取最新构建的安装包(目录里可能残留旧版本,按修改时间降序取第一个)
 $setup = Get-ChildItem -Path (Join-Path $repo "target\release\bundle\nsis") -Filter "*-setup.exe" -ErrorAction SilentlyContinue |
-         Select-Object -First 1
+         Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $setup) { throw "NSIS installer not found" }
 Write-Host "DONE installer: $($setup.FullName)" -ForegroundColor Green
