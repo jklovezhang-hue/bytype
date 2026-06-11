@@ -57,9 +57,9 @@ impl Transcript {
         Transcript { base: base.to_string(), lines }
     }
 
-    /// 渲染为 Markdown(M2:仅转写;M4 会在前面补纪要)。
-    pub fn to_markdown(&self) -> String {
-        let mut out = format!("# 会议转写 {}\n\n", self.base);
+    /// 仅转写正文(无标题),每行 `[mm:ss] **说话人**:文本`。
+    pub fn lines_markdown(&self) -> String {
+        let mut out = String::new();
         for l in &self.lines {
             out.push_str(&format!(
                 "`[{}]` **{}**:{}\n\n",
@@ -69,6 +69,11 @@ impl Transcript {
             ));
         }
         out
+    }
+
+    /// 渲染为 Markdown(标题 + 转写正文)。
+    pub fn to_markdown(&self) -> String {
+        format!("# 会议转写 {}\n\n{}", self.base, self.lines_markdown())
     }
 
     /// 渲染为结构化 JSON(供重新生成纪要)。
