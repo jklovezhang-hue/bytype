@@ -292,7 +292,13 @@ fn stop_meeting(app: &tauri::AppHandle) {
     show_meeting_overlay(app, false);
     refresh_tray(app, false, None);
     if let Some(sess) = sess {
-        match sess.stop(cfg.meeting.audio_retention, cfg.meeting.archive_bitrate) {
+        match sess.stop(
+            cfg.meeting.audio_retention,
+            cfg.meeting.archive_bitrate,
+            cfg.asr.model_dir.clone(),
+            cfg.asr.language.clone(),
+            cfg.meeting.vad_model.clone(),
+        ) {
             Ok(mp3) => eprintln!("会议结束,已存: {}", mp3.display()),
             Err(e) => eprintln!("会议结束处理失败: {e}"),
         }

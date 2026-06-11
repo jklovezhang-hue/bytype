@@ -84,14 +84,23 @@ impl MeetingSession {
         Ok(MeetingSession { paths, mic, system })
     }
 
-    /// 结束:停采集 → 混音 → MP3 → 按保留档删原始轨。返回 mp3 路径。
-    pub fn stop(self, retention: AudioRetention, bitrate: u32) -> Result<PathBuf> {
+    /// 结束:停采集 → 混音 MP3 → 后台转写(写 md/json)→ 按保留档删原始轨。
+    /// 立即返回 mp3 路径;转写在后台线程完成并打印日志。
+    pub fn stop(
+        self,
+        retention: AudioRetention,
+        bitrate: u32,
+        asr_model_dir: String,
+        language: String,
+        vad_model: String,
+    ) -> Result<PathBuf> {
         if let Some(m) = self.mic {
             m.stop()?;
         }
         if let Some(s) = self.system {
             s.stop()?;
         }
+
         let mut tracks: Vec<Vec<i16>> = Vec::new();
         for wav in [&self.paths.mic_wav, &self.paths.system_wav] {
             if wav.exists() {
@@ -103,12 +112,40 @@ impl MeetingSession {
         }
         let mixed = mix_tracks(&tracks);
         encode_mp3_file(&self.paths.mp3, &mixed, bitrate)?;
-        for p in plan_retention(&self.paths, retention) {
-            let _ = std::fs::remove_file(p);
-        }
-        if retention == AudioRetention::None {
-            let _ = std::fs::remove_file(&self.paths.mp3);
-        }
+
+        let paths = self.paths.clone();
+        let base = paths
+            .dir
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+        std::thread::spawn(move || {
+            eprintln!("会议转写中…(可能数分钟)");
+            match super::pipeline::transcribe_meeting(
+                &base,
+                &paths.mic_wav,
+                &paths.system_wav,
+                &asr_model_dir,
+                &language,
+                &vad_model,
+            ) {
+                Ok(t) => {
+                    let md = paths.dir.join(format!("{base}.md"));
+                    let json = paths.dir.join(format!("{base}.json"));
+                    let _ = std::fs::write(&md, t.to_markdown());
+                    let _ = std::fs::write(&json, t.to_json());
+                    eprintln!("会议转写完成:{}({} 行)", md.display(), t.lines.len());
+                }
+                Err(e) => eprintln!("会议转写失败(录音与 MP3 已保留):{e}"),
+            }
+            for p in plan_retention(&paths, retention) {
+                let _ = std::fs::remove_file(p);
+            }
+            if retention == AudioRetention::None {
+                let _ = std::fs::remove_file(&paths.mp3);
+            }
+        });
+
         Ok(self.paths.mp3.clone())
     }
 }
