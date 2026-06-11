@@ -93,6 +93,8 @@ impl MeetingSession {
         asr_model_dir: String,
         language: String,
         vad_model: String,
+        llm: crate::config::LlmConfig,
+        minutes_prompt: String,
     ) -> Result<PathBuf> {
         if let Some(m) = self.mic {
             m.stop()?;
@@ -130,11 +132,31 @@ impl MeetingSession {
                 &vad_model,
             ) {
                 Ok(t) => {
-                    let md = paths.dir.join(format!("{base}.md"));
                     let json = paths.dir.join(format!("{base}.json"));
-                    let _ = std::fs::write(&md, t.to_markdown());
                     let _ = std::fs::write(&json, t.to_json());
-                    eprintln!("会议转写完成:{}({} 行)", md.display(), t.lines.len());
+                    let minutes = if llm.enabled && !llm.base_url.trim().is_empty() {
+                        let input = super::minutes::transcript_to_input(&t);
+                        match crate::corrector::generate_minutes(&llm, &minutes_prompt, &input) {
+                            Ok(m) => Some(m),
+                            Err(e) => {
+                                eprintln!("会议纪要生成失败(转写已保存):{e}");
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    };
+                    let md = paths.dir.join(format!("{base}.md"));
+                    let _ = std::fs::write(
+                        &md,
+                        super::minutes::assemble_md(&base, minutes.as_deref(), &t),
+                    );
+                    eprintln!(
+                        "会议成稿:{}({} 行转写{})",
+                        md.display(),
+                        t.lines.len(),
+                        if minutes.is_some() { " + 纪要" } else { "" }
+                    );
                 }
                 Err(e) => eprintln!("会议转写失败(录音与 MP3 已保留):{e}"),
             }

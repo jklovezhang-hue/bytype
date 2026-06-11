@@ -239,11 +239,7 @@ fn start_meeting(app: &tauri::AppHandle, mode: voice_input::config::RecordMode) 
             return;
         }
     };
-    let root = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(cfg.meeting.output_dir.trim_start_matches("./"));
+    let root = std::path::PathBuf::from(&cfg.meeting.output_dir);
     match voice_input::meeting::MeetingSession::start(mode, &root) {
         Ok(sess) => {
             if voice_input::meeting::record_behavior(mode).suspend_dictation {
@@ -298,6 +294,8 @@ fn stop_meeting(app: &tauri::AppHandle) {
             cfg.asr.model_dir.clone(),
             cfg.asr.language.clone(),
             cfg.meeting.vad_model.clone(),
+            cfg.llm.clone(),
+            cfg.meeting.effective_minutes_prompt(),
         ) {
             Ok(mp3) => eprintln!("会议结束,已存: {}", mp3.display()),
             Err(e) => eprintln!("会议结束处理失败: {e}"),
