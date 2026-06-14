@@ -83,4 +83,4 @@ Rust + [Tauri 2](https://tauri.app) + React / TypeScript / Tailwind;语音识别
 
 ## 许可证
 
-[MIT](LICENSE) © 2026 Yong Zhang。第三方开源组件致谢见应用内「设置 → 关于」页。
+[AGPL-3.0](LICENSE) © 2026 Yong Zhang。第三方开源组件致谢见应用内「设置 → 关于」页。
